@@ -1,0 +1,22 @@
+.{
+    .name = .nimble,
+    .version = "0.0.1",
+    .fingerprint = 0x61915b59d2f0c35a,
+    .minimum_zig_version = "0.15.2",
+    .paths = .{
+        "src",
+        "build.zig",
+        "build.zig.zon",
+    },
+    .dependencies = .{
+        .raylib = .{
+            .url = "https://github.com/raysan5/raylib/archive/refs/heads/master.tar.gz",
+            .hash = "raylib-5.6.0-dev-whq8uKx3CwUTDAurJ7cefvhJ26KlbKn-OARGApTr7NZ7",
+            .lazy = true,
+        },
+        .zigwin32 = .{
+            .url = "https://github.com/marlersoft/zigwin32/archive/refs/heads/main.tar.gz",
+            .hash = "zigwin32-25.0.28-preview-AAAAAICM5AMResOGQnQ85mfe60TTOQeMtt7GRATUOKoP",
+        },
+    },
+}
