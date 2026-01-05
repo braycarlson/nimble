@@ -5,6 +5,7 @@ pub const command = @import("command.zig");
 pub const group = @import("group.zig");
 pub const macro = @import("macro.zig");
 pub const modifier = @import("modifier.zig");
+pub const sequence = @import("sequence.zig");
 pub const timer = @import("timer.zig");
 pub const config = @import("../../automation/config.zig");
 
@@ -16,6 +17,7 @@ pub const GroupBindBuilder = group.GroupBindBuilder;
 pub const MacroBuilder = macro.MacroBuilder;
 pub const ModifierBuilder = modifier.ModifierBuilder;
 pub const KeyBindBuilder = modifier.KeyBindBuilder;
+pub const SequenceBuilder = sequence.SequenceBuilder;
 pub const TimerBuilder = timer.TimerBuilder;
 
 pub const RepeatChainBuilder = bind.RepeatChainBuilder;

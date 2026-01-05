@@ -94,6 +94,19 @@ pub fn BaseRegistry(
             return self.slot.free_by_id(id) orelse return error.NotFound;
         }
 
+        pub fn free_locked(self: *Self, slot: u32) BaseError!u32 {
+            std.debug.assert(slot < capacity);
+
+            if (!self.slot.entries[slot].is_active()) {
+                return error.NotFound;
+            }
+
+            self.slot.entries[slot] = .{};
+            self.slot.count -= 1;
+
+            return slot;
+        }
+
         pub fn get_by_id(self: *Self, id: u32) ?*Entry {
             return self.slot.get_by_id(id);
         }

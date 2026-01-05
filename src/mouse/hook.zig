@@ -19,6 +19,10 @@ const Button = sender.Button;
 const Monitor = sender.Monitor;
 const MonitorList = sender.MonitorList;
 
+pub const Error = error{
+    HookInstallFailed,
+};
+
 pub const Config = struct {
     capacity: u32 = 128,
 };
@@ -37,6 +41,7 @@ pub fn MouseHook(comptime config: Config) type {
         mutex: std.Thread.Mutex = .{},
         hook_handle: ?primitive.Hook = null,
         module_handle: ?w32.HINSTANCE = null,
+        blocked: bool = false,
 
         pub fn init() Self {
             return Self{};
@@ -53,6 +58,14 @@ pub fn MouseHook(comptime config: Config) type {
 
         pub fn group(self: *Self) builder.GroupBuilder(Self) {
             return builder.GroupBuilder(Self).init(self);
+        }
+
+        pub fn is_blocked(self: *const Self) bool {
+            return self.blocked;
+        }
+
+        pub fn set_blocked(self: *Self, value: bool) void {
+            self.blocked = value;
         }
 
         pub fn click(_: *Self, button: Button) bool {
@@ -289,6 +302,10 @@ pub fn MouseHook(comptime config: Config) type {
             }
 
             const self = instance.?;
+
+            if (self.blocked) {
+                return 1;
+            }
 
             if (self.registry.process(&parsed)) |response| {
                 if (response == .consume) {

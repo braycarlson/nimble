@@ -4,6 +4,7 @@ pub const command = @import("command.zig");
 pub const entry = @import("entry.zig");
 pub const key = @import("key.zig");
 pub const mouse = @import("mouse.zig");
+pub const sequence = @import("sequence.zig");
 pub const slot = @import("slot.zig");
 pub const timer = @import("timer.zig");
 
@@ -28,6 +29,9 @@ pub const KeyOptions = key.Options;
 
 pub const MouseRegistry = mouse.MouseRegistry;
 pub const MouseOptions = mouse.Options;
+
+pub const SequenceRegistry = sequence.SequenceRegistry;
+pub const SequenceOptions = sequence.Options;
 
 pub const SlotManager = slot.SlotManager;
 

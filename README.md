@@ -1,2 +1,2 @@
 # nimble
-A Windows input automation toolkit
+An input automation toolkit for Windows

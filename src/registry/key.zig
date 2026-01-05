@@ -26,6 +26,7 @@ pub const Entry = struct {
     base: entry_mod.FilteredEntry(Callback, WindowFilter) = .{},
     key: u8 = 0,
     modifiers: modifier.Set = .{},
+    block_exempt: bool = false,
     pause_exempt: bool = false,
 
     pub fn get_id(self: *const Entry) u32 {
@@ -71,6 +72,7 @@ const Invocation = struct {
 
 pub const Options = struct {
     filter: WindowFilter = .{},
+    block_exempt: bool = false,
     pause_exempt: bool = false,
 };
 
@@ -135,6 +137,25 @@ pub fn KeyRegistry(comptime capacity: u32) type {
                 }
 
                 break :blk self.resolve_locked(key);
+            };
+
+            if (invocation) |inv| {
+                return inv.callback(inv.context, key);
+            }
+
+            return null;
+        }
+
+        pub fn process_blocked(self: *Self, key: *const Key) ?Response {
+            std.debug.assert(key.is_valid());
+
+            const invocation = blk: {
+                self.base.lock();
+                defer self.base.unlock();
+
+                std.debug.assert(self.is_valid());
+
+                break :blk self.resolve_block_exempt_locked(key);
             };
 
             if (invocation) |inv| {
@@ -210,6 +231,41 @@ pub fn KeyRegistry(comptime capacity: u32) type {
             };
         }
 
+        fn resolve_block_exempt_locked(self: *Self, key: *const Key) ?Invocation {
+            std.debug.assert(self.is_valid());
+            std.debug.assert(key.is_valid());
+
+            const index = pack_lookup(key.value, key.modifiers);
+
+            std.debug.assert(index < lookup_size);
+
+            const slot = self.lookup[index] orelse return null;
+
+            std.debug.assert(slot < capacity);
+
+            const entry = &self.base.slot.entries[slot];
+
+            if (!entry.is_active()) {
+                return null;
+            }
+
+            if (!entry.block_exempt) {
+                return null;
+            }
+
+            if (!entry.matches_filter()) {
+                return null;
+            }
+
+            const callback = entry.get_callback() orelse return null;
+            const context = entry.get_context() orelse return null;
+
+            return Invocation{
+                .callback = callback,
+                .context = context,
+            };
+        }
+
         pub fn find(self: *Self, key: *const Key) ?*Entry {
             std.debug.assert(key.is_valid());
 
@@ -269,6 +325,7 @@ pub fn KeyRegistry(comptime capacity: u32) type {
                 },
                 .key = key,
                 .modifiers = modifiers,
+                .block_exempt = options.block_exempt,
                 .pause_exempt = options.pause_exempt,
             };
 

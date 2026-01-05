@@ -15,6 +15,7 @@ const timer_registry = @import("../registry/timer.zig");
 const repeat_registry = @import("../automation/repeat.zig");
 const macro_registry = @import("../automation/macro.zig");
 const toggle_registry = @import("../automation/toggle.zig");
+const sequence_registry = @import("../registry/sequence.zig");
 const sender = @import("../sender/key.zig");
 const typer_mod = @import("../sender/typer.zig");
 const clipboard_mod = @import("../clipboard.zig");
@@ -39,11 +40,11 @@ pub const Config = struct {
     capacity_repeat: u32 = 32,
     capacity_macro: u32 = 16,
     capacity_toggle: u32 = 16,
+    capacity_sequence: u32 = 8,
     pass_injected: bool = false,
 };
 
-var instance_global: std.atomic.Value(?*anyopaque) = std.atomic.Value(?*anyopaque).init(null);
-var proc_global: std.atomic.Value(?*const fn (c_int, w32.WPARAM, w32.LPARAM) callconv(.c) w32.LRESULT) = std.atomic.Value(?*const fn (c_int, w32.WPARAM, w32.LPARAM) callconv(.c) w32.LRESULT).init(null);
+pub const KeyCallback = *const fn (ctx: *anyopaque, value: u8, down: bool, extra: u64) ?u32;
 
 pub fn KeyboardHook(comptime config: Config) type {
     const capacity = config.capacity;
@@ -53,9 +54,12 @@ pub fn KeyboardHook(comptime config: Config) type {
     const capacity_repeat = config.capacity_repeat;
     const capacity_macro = config.capacity_macro;
     const capacity_toggle = config.capacity_toggle;
+    const capacity_sequence = config.capacity_sequence;
 
     return struct {
         const Self = @This();
+
+        var instance: ?*Self = null;
 
         const Registry = key_registry.KeyRegistry(capacity);
         const ChordRegistry = chord_registry.ChordRegistry(capacity_chord);
@@ -64,6 +68,7 @@ pub fn KeyboardHook(comptime config: Config) type {
         const RepeatRegistry = repeat_registry.RepeatRegistry(capacity_repeat);
         const MacroRegistry = macro_registry.MacroRegistry(capacity_macro);
         const ToggleRegistry = toggle_registry.ToggleRegistry(capacity_toggle);
+        const SequenceRegistry = sequence_registry.SequenceRegistry(capacity_sequence);
 
         registry: Registry = Registry.init(),
         chord_registry: ChordRegistry = ChordRegistry.init(),
@@ -72,35 +77,25 @@ pub fn KeyboardHook(comptime config: Config) type {
         repeat_registry: RepeatRegistry = RepeatRegistry.init(),
         macro_registry: MacroRegistry = MacroRegistry.init(),
         toggle_registry: ToggleRegistry = ToggleRegistry.init(),
+        sequence_registry: SequenceRegistry = SequenceRegistry.init(),
         keyboard: KeyboardState = KeyboardState.init(),
+        blocked: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
         running: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
         mutex: std.Thread.Mutex = .{},
         hook_handle: ?primitive.Hook = null,
         module_handle: ?w32.HINSTANCE = null,
+        key_callback: ?KeyCallback = null,
+        key_context: ?*anyopaque = null,
 
         pub fn init() Self {
-            return Self{
-                .registry = Registry.init(),
-                .chord_registry = ChordRegistry.init(),
-                .command_registry = CommandRegistry.init(),
-                .timer_registry = TimerRegistry.init(),
-                .repeat_registry = RepeatRegistry.init(),
-                .macro_registry = MacroRegistry.init(),
-                .toggle_registry = ToggleRegistry.init(),
-                .keyboard = KeyboardState.init(),
-                .running = std.atomic.Value(bool).init(false),
-                .mutex = .{},
-                .hook_handle = null,
-                .module_handle = null,
-            };
+            return Self{};
         }
 
         pub fn deinit(self: *Self) void {
             self.stop();
-            self.timer_registry.stop_all();
-            self.timer_registry.clear_global();
             self.repeat_registry.stop_all();
             self.macro_registry.stop();
+            self.timer_registry.clear_global();
             self.registry.clear();
             self.chord_registry.clear();
             self.command_registry.clear();
@@ -108,13 +103,24 @@ pub fn KeyboardHook(comptime config: Config) type {
             self.repeat_registry.clear();
             self.macro_registry.clear();
             self.toggle_registry.clear();
+            self.sequence_registry.clear();
+        }
+
+        pub fn set_key_callback(self: *Self, callback: KeyCallback, context: *anyopaque) void {
+            self.key_callback = callback;
+            self.key_context = context;
+        }
+
+        pub fn clear_key_callback(self: *Self) void {
+            self.key_callback = null;
+            self.key_context = null;
         }
 
         pub fn start(self: *Self) !void {
             self.mutex.lock();
             defer self.mutex.unlock();
 
-            if (self.running.load(.acquire)) {
+            if (self.running.load(.seq_cst)) {
                 return;
             }
 
@@ -125,30 +131,29 @@ pub fn KeyboardHook(comptime config: Config) type {
             }
 
             self.timer_registry.set_global();
+            self.blocked.store(false, .seq_cst);
 
-            instance_global.store(self, .release);
-            proc_global.store(Self.hook_proc, .release);
+            instance = self;
 
-            self.hook_handle = primitive.Hook.install(.keyboard, wrapper_proc, self.module_handle.?);
+            self.hook_handle = primitive.Hook.install(.keyboard, hook_callback, self.module_handle.?);
 
             if (self.hook_handle == null) {
-                instance_global.store(null, .release);
-                proc_global.store(null, .release);
+                instance = null;
                 return error.HookInstallFailed;
             }
 
-            self.running.store(true, .release);
+            self.running.store(true, .seq_cst);
         }
 
         pub fn stop(self: *Self) void {
             self.mutex.lock();
 
-            if (!self.running.load(.acquire)) {
+            if (!self.running.load(.seq_cst)) {
                 self.mutex.unlock();
                 return;
             }
 
-            self.running.store(false, .release);
+            self.running.store(false, .seq_cst);
             self.mutex.unlock();
 
             if (self.hook_handle) |h| {
@@ -156,12 +161,12 @@ pub fn KeyboardHook(comptime config: Config) type {
                 self.hook_handle = null;
             }
 
-            instance_global.store(null, .release);
-            proc_global.store(null, .release);
+            instance = null;
+            self.blocked.store(false, .seq_cst);
         }
 
         pub fn is_running(self: *Self) bool {
-            return self.running.load(.acquire);
+            return self.running.load(.seq_cst);
         }
 
         pub fn is_paused(self: *Self) bool {
@@ -172,12 +177,23 @@ pub fn KeyboardHook(comptime config: Config) type {
             self.registry.set_paused(value);
         }
 
+        pub fn is_blocked(self: *Self) bool {
+            return self.blocked.load(.seq_cst);
+        }
+
+        pub fn set_blocked(self: *Self, value: bool) void {
+            self.blocked.store(value, .seq_cst);
+            if (value) {
+                self.sequence_registry.reset();
+            }
+        }
+
         pub fn bind(self: *Self, comptime pattern: []const u8) builder.BindBuilder(Self) {
             return builder.BindBuilder(Self).init(self, pattern);
         }
 
-        pub fn chord(self: *Self, sequence: []const u8) builder.ChordBuilder(Self) {
-            return builder.ChordBuilder(Self).init(self, sequence);
+        pub fn chord(self: *Self, seq: []const u8) builder.ChordBuilder(Self) {
+            return builder.ChordBuilder(Self).init(self, seq);
         }
 
         pub fn command(self: *Self, name: []const u8) builder.CommandBuilder(Self) {
@@ -188,99 +204,68 @@ pub fn KeyboardHook(comptime config: Config) type {
             return builder.GroupBuilder(Self).init(self);
         }
 
-        pub fn ctrl(self: *Self) builder.ModifierBuilder(Self) {
-            return builder.ModifierBuilder(Self).init(self).ctrl();
-        }
-
-        pub fn alt(self: *Self) builder.ModifierBuilder(Self) {
-            return builder.ModifierBuilder(Self).init(self).alt();
-        }
-
-        pub fn shift(self: *Self) builder.ModifierBuilder(Self) {
-            return builder.ModifierBuilder(Self).init(self).shift();
-        }
-
-        pub fn win(self: *Self) builder.ModifierBuilder(Self) {
-            return builder.ModifierBuilder(Self).init(self).win();
-        }
-
-        pub fn timer(self: *Self, interval_ms: u32) builder.TimerBuilder(TimerRegistry) {
-            return builder.TimerBuilder(TimerRegistry).init(&self.timer_registry, interval_ms);
-        }
-
-        pub fn every(self: *Self, ms: u32) builder.TimerBuilder(TimerRegistry) {
-            return builder.TimerBuilder(TimerRegistry).every(&self.timer_registry, ms);
-        }
-
-        pub fn after(self: *Self, ms: u32) builder.TimerBuilder(TimerRegistry) {
-            return builder.TimerBuilder(TimerRegistry).after(&self.timer_registry, ms);
-        }
-
-        pub fn macro(self: *Self, name: []const u8) builder.MacroBuilder(Self) {
-            return builder.MacroBuilder(Self).init(self, name);
-        }
-
-        pub fn with_modifiers(self: *Self) builder.ModifierBuilder(Self) {
+        pub fn modifier_binding(self: *Self) builder.ModifierBuilder(Self) {
             return builder.ModifierBuilder(Self).init(self);
         }
 
-        pub fn send(_: *Self, text: []const u8) void {
-            _ = typer_mod.send(text) catch {};
+        pub fn timer(self: *Self, interval_ms: u32) builder.TimerBuilder(Self.TimerRegistry) {
+            return builder.TimerBuilder(Self.TimerRegistry).init(&self.timer_registry, interval_ms);
         }
 
-        pub fn send_with_delay(_: *Self, text: []const u8, delay_ms: u32) void {
-            _ = typer_mod.send_with_delay(text, delay_ms) catch {};
+        pub fn macro_builder(self: *Self, comptime name: []const u8) builder.MacroBuilder(Self) {
+            return builder.MacroBuilder(Self).init(self, name);
         }
 
-        pub fn paste_text(_: *Self, text: []const u8) !void {
-            try clipboard_mod.set(text);
-            _ = clipboard_mod.paste();
+        pub fn sequence(self: *Self, pattern: []const u8) builder.SequenceBuilder(Self) {
+            return builder.SequenceBuilder(Self).init(self, pattern);
         }
 
-        pub fn send_key(_: *Self, comptime pattern: []const u8) void {
-            sender.send(pattern);
+        pub fn press(_: *Self, value: u8) bool {
+            return sender.press(value);
         }
 
-        pub fn send_key_with_modifiers(_: *Self, value: u8, modifiers: modifier.Set) void {
-            sender.send_with_modifiers(value, &modifiers);
+        pub fn key_down(_: *Self, value: u8) bool {
+            return sender.key_down(value);
         }
 
-        pub fn type_text(_: *Self, text: []const u8) typer_mod.Error!u32 {
-            return typer_mod.send(text);
+        pub fn key_up(_: *Self, value: u8) bool {
+            return sender.key_up(value);
         }
 
-        pub fn type_text_with_delay(_: *Self, text: []const u8, delay_ms: u32) typer_mod.Error!u32 {
-            return typer_mod.send_with_delay(text, delay_ms);
+        pub fn send_chord(_: *Self, value: u8, modifiers: modifier.Set) bool {
+            return sender.send_chord(value, modifiers);
         }
 
-        fn hook_proc(
-            keycode_hook: c_int,
+        pub fn typer(_: *Self) typer_mod.Typer {
+            return typer_mod.Typer.init();
+        }
+
+        pub fn clipboard(_: *Self) clipboard_mod.Clipboard {
+            return clipboard_mod.Clipboard.init();
+        }
+
+        pub fn get_modifiers(self: *Self) *modifier.Set {
+            return self.keyboard.get_modifiers();
+        }
+
+        fn hook_callback(
+            code: c_int,
             wparam: w32.WPARAM,
             lparam: w32.LPARAM,
         ) callconv(.c) w32.LRESULT {
-            if (keycode_hook < 0) {
-                return primitive.next(keycode_hook, wparam, lparam);
+            if (code < 0) {
+                return primitive.next(code, wparam, lparam);
             }
+
+            const self = instance orelse return primitive.next(code, wparam, lparam);
 
             const parsed = Key.parse(wparam, lparam) orelse {
-                return primitive.next(keycode_hook, wparam, lparam);
+                return primitive.next(code, wparam, lparam);
             };
 
-            if (parsed.injected and !config.pass_injected) {
-                return primitive.next(keycode_hook, wparam, lparam);
+            if (config.pass_injected and parsed.injected) {
+                return primitive.next(code, wparam, lparam);
             }
-
-            if (parsed.value == keycode_silent) {
-                return primitive.next(keycode_hook, wparam, lparam);
-            }
-
-            const instance: ?*Self = @ptrCast(@alignCast(instance_global.load(.acquire)));
-
-            if (instance == null) {
-                return primitive.next(keycode_hook, wparam, lparam);
-            }
-
-            const self = instance.?;
 
             self.keyboard.sync();
 
@@ -291,6 +276,38 @@ pub fn KeyboardHook(comptime config: Config) type {
             }
 
             const key = parsed.with_modifiers(self.keyboard.get_modifiers());
+
+            if (self.key_callback) |callback| {
+                if (self.key_context) |context| {
+                    if (callback(context, parsed.value, parsed.down, parsed.extra)) |result| {
+                        if (result == 0) {
+                            return 1;
+                        }
+                    }
+                }
+            }
+
+            const was_blocked = self.blocked.load(.seq_cst);
+
+            if (parsed.down) {
+                _ = self.sequence_registry.process(parsed.value, was_blocked);
+            }
+
+            const currently_blocked = self.blocked.load(.seq_cst);
+
+            if (currently_blocked) {
+                if (!parsed.down) {
+                    return primitive.next(code, wparam, lparam);
+                }
+
+                if (self.registry.process_blocked(&key)) |response| {
+                    if (response == .consume) {
+                        return 1;
+                    }
+                }
+
+                return 1;
+            }
 
             if (parsed.down) {
                 const now_ms = std.time.milliTimestamp();
@@ -314,19 +331,7 @@ pub fn KeyboardHook(comptime config: Config) type {
                 }
             }
 
-            return primitive.next(keycode_hook, wparam, lparam);
+            return primitive.next(code, wparam, lparam);
         }
     };
-}
-
-fn wrapper_proc(
-    keycode_hook: c_int,
-    wparam: w32.WPARAM,
-    lparam: w32.LPARAM,
-) callconv(.c) w32.LRESULT {
-    if (proc_global.load(.acquire)) |proc| {
-        return proc(keycode_hook, wparam, lparam);
-    }
-
-    return primitive.next(keycode_hook, wparam, lparam);
 }
