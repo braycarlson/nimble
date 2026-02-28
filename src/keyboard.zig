@@ -2,25 +2,25 @@ const std = @import("std");
 
 const w32 = @import("win32").everything;
 
-const primitive = @import("../hook.zig");
-const keycode = @import("../keycode.zig");
-const modifier = @import("../modifier.zig");
-const state = @import("../state.zig");
-const response_mod = @import("../response.zig");
-const key_event = @import("../event/key.zig");
-const key_registry = @import("../registry/key.zig");
-const chord_registry = @import("../registry/chord.zig");
-const command_mod = @import("../registry/command.zig");
-const timer_registry = @import("../registry/timer.zig");
-const repeat_registry = @import("../automation/repeat.zig");
-const macro_registry = @import("../automation/macro.zig");
-const toggle_registry = @import("../automation/toggle.zig");
-const sequence_registry = @import("../registry/sequence.zig");
-const sender = @import("../sender/key.zig");
-const typer_mod = @import("../sender/typer.zig");
-const clipboard_mod = @import("../clipboard.zig");
+const primitive = @import("hook.zig");
+const keycode = @import("keycode.zig");
+const modifier = @import("modifier.zig");
+const state = @import("state.zig");
+const response_mod = @import("response.zig");
+const key_event = @import("event/key.zig");
+const key_registry = @import("registry/key.zig");
+const chord_registry = @import("registry/chord.zig");
+const command_mod = @import("registry/command.zig");
+const timer_registry = @import("registry/timer.zig");
+const repeat_registry = @import("registry/repeat.zig");
+const macro_registry = @import("registry/macro.zig");
+const toggle_registry = @import("registry/toggle.zig");
+const sequence_registry = @import("registry/sequence.zig");
+const simulate_key = @import("simulate/key.zig");
+const simulate_text = @import("simulate/text.zig");
+const clipboard_mod = @import("clipboard.zig");
 
-const builder = @import("../builder/keyboard/root.zig");
+const builder = @import("builder/keyboard.zig");
 
 const Key = key_event.Key;
 const Response = response_mod.Response;
@@ -182,9 +182,24 @@ pub fn KeyboardHook(comptime config: Config) type {
         }
 
         pub fn set_blocked(self: *Self, value: bool) void {
+            const was_blocked = self.blocked.load(.seq_cst);
             self.blocked.store(value, .seq_cst);
-            if (value) {
-                self.sequence_registry.reset();
+
+            if (was_blocked and !value) {
+                self.release_modifier();
+            }
+        }
+
+        fn release_modifier(_: *Self) void {
+            const keys = [_]u8{
+                keycode.lctrl,  keycode.rctrl,
+                keycode.lmenu,  keycode.rmenu,
+                keycode.lshift, keycode.rshift,
+                keycode.lwin,   keycode.rwin,
+            };
+
+            for (keys) |key| {
+                _ = simulate_key.key_up(key);
             }
         }
 
@@ -221,23 +236,23 @@ pub fn KeyboardHook(comptime config: Config) type {
         }
 
         pub fn press(_: *Self, value: u8) bool {
-            return sender.press(value);
+            return simulate_key.press(value);
         }
 
         pub fn key_down(_: *Self, value: u8) bool {
-            return sender.key_down(value);
+            return simulate_key.key_down(value);
         }
 
         pub fn key_up(_: *Self, value: u8) bool {
-            return sender.key_up(value);
+            return simulate_key.key_up(value);
         }
 
         pub fn send_chord(_: *Self, value: u8, modifiers: modifier.Set) bool {
-            return sender.send_chord(value, modifiers);
+            return simulate_key.send_chord(value, modifiers);
         }
 
-        pub fn typer(_: *Self) typer_mod.Typer {
-            return typer_mod.Typer.init();
+        pub fn typer(_: *Self) simulate_text.Typer {
+            return simulate_text.Typer.init();
         }
 
         pub fn clipboard(_: *Self) clipboard_mod.Clipboard {
@@ -297,7 +312,13 @@ pub fn KeyboardHook(comptime config: Config) type {
 
             if (currently_blocked) {
                 if (!parsed.down) {
-                    return primitive.next(code, wparam, lparam);
+                    if (self.registry.process_blocked(&key)) |response| {
+                        if (response == .consume) {
+                            return 1;
+                        }
+                    }
+
+                    return 1;
                 }
 
                 if (self.registry.process_blocked(&key)) |response| {

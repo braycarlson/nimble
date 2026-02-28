@@ -7,6 +7,33 @@ pub fn is_whitespace(c: u8) bool {
     return c == ' ' or c == '\t' or c == '\n' or c == '\r';
 }
 
+pub fn from_keycode(value: u8) u8 {
+    if (value >= 'A' and value <= 'Z') {
+        return value + 32;
+    }
+
+    if (value >= '0' and value <= '9') {
+        return value;
+    }
+
+    return switch (value) {
+        keycode.space => ' ',
+        keycode.@"return" => '\r',
+        keycode.oem_1 => ';',
+        keycode.oem_2 => '/',
+        keycode.oem_3 => '`',
+        keycode.oem_4 => '[',
+        keycode.oem_5 => '\\',
+        keycode.oem_6 => ']',
+        keycode.oem_7 => '\'',
+        keycode.oem_plus => '=',
+        keycode.oem_comma => ',',
+        keycode.oem_minus => '-',
+        keycode.oem_period => '.',
+        else => 0,
+    };
+}
+
 pub fn from_key(key: *const Key) ?u8 {
     const value = key.value;
 

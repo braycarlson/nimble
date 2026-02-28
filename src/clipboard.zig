@@ -2,7 +2,7 @@ const std = @import("std");
 
 const w32 = @import("win32").everything;
 
-const sender = @import("sender/key.zig");
+const simulate_key = @import("simulate/key.zig");
 const keycode = @import("keycode.zig");
 const modifier = @import("modifier.zig");
 
@@ -93,47 +93,47 @@ pub fn get(buffer: []u8) Error![]const u8 {
 }
 
 pub fn paste() bool {
-    return sender.combination(&modifier.Set.from(.{ .ctrl = true }), 'V');
+    return simulate_key.combination(&modifier.Set.from(.{ .ctrl = true }), 'V');
 }
 
 pub fn copy() bool {
-    return sender.combination(&modifier.Set.from(.{ .ctrl = true }), 'C');
+    return simulate_key.combination(&modifier.Set.from(.{ .ctrl = true }), 'C');
 }
 
 pub fn cut() bool {
-    return sender.combination(&modifier.Set.from(.{ .ctrl = true }), 'X');
+    return simulate_key.combination(&modifier.Set.from(.{ .ctrl = true }), 'X');
 }
 
 pub fn select_all() bool {
-    return sender.combination(&modifier.Set.from(.{ .ctrl = true }), 'A');
+    return simulate_key.combination(&modifier.Set.from(.{ .ctrl = true }), 'A');
 }
 
 pub fn select_left(count: u32) void {
     std.debug.assert(count > 0);
 
-    _ = sender.key_down(keycode.lshift);
+    _ = simulate_key.key_down(keycode.lshift);
 
     var i: u32 = 0;
 
     while (i < count) : (i += 1) {
-        _ = sender.press(keycode.left);
+        _ = simulate_key.press(keycode.left);
     }
 
-    _ = sender.key_up(keycode.lshift);
+    _ = simulate_key.key_up(keycode.lshift);
 }
 
 pub fn select_right(count: u32) void {
     std.debug.assert(count > 0);
 
-    _ = sender.key_down(keycode.lshift);
+    _ = simulate_key.key_down(keycode.lshift);
 
     var i: u32 = 0;
 
     while (i < count) : (i += 1) {
-        _ = sender.press(keycode.right);
+        _ = simulate_key.press(keycode.right);
     }
 
-    _ = sender.key_up(keycode.lshift);
+    _ = simulate_key.key_up(keycode.lshift);
 }
 
 pub fn replace(select_count: u32, text: []const u8) Error!void {

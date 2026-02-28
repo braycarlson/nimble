@@ -137,6 +137,22 @@ pub fn CircularBuffer(comptime capacity: u32) type {
             std.debug.assert(self.buffer[wrap(self.tail + capacity - 1)] == value);
         }
 
+        pub fn pop(self: *Self) ?u8 {
+            std.debug.assert(self.is_valid());
+
+            if (self.is_empty()) {
+                return null;
+            }
+
+            self.tail = decrement(self.tail);
+
+            const result = self.buffer[self.tail];
+
+            std.debug.assert(self.is_valid());
+
+            return result;
+        }
+
         fn compare(self: *const Self, pattern: []const u8, size: u32) bool {
             std.debug.assert(self.is_valid());
             std.debug.assert(size > 0);

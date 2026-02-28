@@ -2,22 +2,22 @@ const std = @import("std");
 
 const w32 = @import("win32").everything;
 
-const primitive = @import("../hook.zig");
-const response_mod = @import("../response.zig");
-const event = @import("../event/mouse.zig");
-const registry = @import("../registry/mouse.zig");
-const sender = @import("../sender/mouse.zig");
+const primitive = @import("hook.zig");
+const response_mod = @import("response.zig");
+const event = @import("event/mouse.zig");
+const registry = @import("registry/mouse.zig");
+const simulate_mouse = @import("simulate/mouse.zig");
 
-const builder = @import("../builder/mouse/root.zig");
+const builder = @import("builder/mouse.zig");
 
 const Mouse = event.Mouse;
 const MouseKind = event.Kind;
 const Response = response_mod.Response;
-const Position = sender.Position;
-const Screen = sender.Screen;
-const Button = sender.Button;
-const Monitor = sender.Monitor;
-const MonitorList = sender.MonitorList;
+const Position = simulate_mouse.Position;
+const Screen = simulate_mouse.Screen;
+const Button = simulate_mouse.Button;
+const Monitor = simulate_mouse.Monitor;
+const MonitorList = simulate_mouse.MonitorList;
 
 pub const Error = error{
     HookInstallFailed,
@@ -69,115 +69,115 @@ pub fn MouseHook(comptime config: Config) type {
         }
 
         pub fn click(_: *Self, button: Button) bool {
-            return sender.click(button);
+            return simulate_mouse.click(button);
         }
 
         pub fn left_click(_: *Self) bool {
-            return sender.left_click();
+            return simulate_mouse.left_click();
         }
 
         pub fn right_click(_: *Self) bool {
-            return sender.right_click();
+            return simulate_mouse.right_click();
         }
 
         pub fn middle_click(_: *Self) bool {
-            return sender.middle_click();
+            return simulate_mouse.middle_click();
         }
 
         pub fn double_click(_: *Self, button: Button) bool {
-            return sender.double_click(button);
+            return simulate_mouse.double_click(button);
         }
 
         pub fn left_double_click(_: *Self) bool {
-            return sender.left_double_click();
+            return simulate_mouse.left_double_click();
         }
 
         pub fn button_down(_: *Self, button: Button) bool {
-            return sender.button_down(button);
+            return simulate_mouse.button_down(button);
         }
 
         pub fn button_up(_: *Self, button: Button) bool {
-            return sender.button_up(button);
+            return simulate_mouse.button_up(button);
         }
 
         pub fn move_to(_: *Self, x: i32, y: i32) bool {
-            return sender.move_to(x, y);
+            return simulate_mouse.move_to(x, y);
         }
 
         pub fn move_to_position(_: *Self, position: Position) bool {
-            return sender.move_to_position(position);
+            return simulate_mouse.move_to_position(position);
         }
 
         pub fn move_relative(_: *Self, dx: i32, dy: i32) bool {
-            return sender.move_relative(dx, dy);
+            return simulate_mouse.move_relative(dx, dy);
         }
 
         pub fn move_to_monitor(_: *Self, index: u8, x: i32, y: i32) bool {
-            return sender.move_to_monitor(index, x, y);
+            return simulate_mouse.move_to_monitor(index, x, y);
         }
 
         pub fn move_to_monitor_center(_: *Self, index: u8) bool {
-            return sender.move_to_monitor_center(index);
+            return simulate_mouse.move_to_monitor_center(index);
         }
 
         pub fn move_to_primary_monitor(_: *Self, x: i32, y: i32) bool {
-            return sender.move_to_primary_monitor(x, y);
+            return simulate_mouse.move_to_primary_monitor(x, y);
         }
 
         pub fn move_to_primary_center(_: *Self) bool {
-            return sender.move_to_primary_center();
+            return simulate_mouse.move_to_primary_center();
         }
 
         pub fn scroll_up(_: *Self, clicks: u32) bool {
-            return sender.scroll_up(clicks);
+            return simulate_mouse.scroll_up(clicks);
         }
 
         pub fn scroll_down(_: *Self, clicks: u32) bool {
-            return sender.scroll_down(clicks);
+            return simulate_mouse.scroll_down(clicks);
         }
 
         pub fn scroll_left(_: *Self, clicks: u32) bool {
-            return sender.scroll_left(clicks);
+            return simulate_mouse.scroll_left(clicks);
         }
 
         pub fn scroll_right(_: *Self, clicks: u32) bool {
-            return sender.scroll_right(clicks);
+            return simulate_mouse.scroll_right(clicks);
         }
 
         pub fn drag(_: *Self, button: Button, from: Position, to: Position) bool {
-            return sender.drag(button, from, to);
+            return simulate_mouse.drag(button, from, to);
         }
 
         pub fn left_drag(_: *Self, from: Position, to: Position) bool {
-            return sender.left_drag(from, to);
+            return simulate_mouse.left_drag(from, to);
         }
 
         pub fn click_at(_: *Self, button: Button, x: i32, y: i32) bool {
-            return sender.click_at(button, x, y);
+            return simulate_mouse.click_at(button, x, y);
         }
 
         pub fn left_click_at(_: *Self, x: i32, y: i32) bool {
-            return sender.left_click_at(x, y);
+            return simulate_mouse.left_click_at(x, y);
         }
 
         pub fn right_click_at(_: *Self, x: i32, y: i32) bool {
-            return sender.right_click_at(x, y);
+            return simulate_mouse.right_click_at(x, y);
         }
 
         pub fn click_on_monitor(_: *Self, button: Button, index: u8, x: i32, y: i32) bool {
-            return sender.click_on_monitor(button, index, x, y);
+            return simulate_mouse.click_on_monitor(button, index, x, y);
         }
 
         pub fn left_click_on_monitor(_: *Self, index: u8, x: i32, y: i32) bool {
-            return sender.left_click_on_monitor(index, x, y);
+            return simulate_mouse.left_click_on_monitor(index, x, y);
         }
 
         pub fn right_click_on_monitor(_: *Self, index: u8, x: i32, y: i32) bool {
-            return sender.right_click_on_monitor(index, x, y);
+            return simulate_mouse.right_click_on_monitor(index, x, y);
         }
 
         pub fn get_position(_: *Self) Position {
-            return sender.get_position();
+            return simulate_mouse.get_position();
         }
 
         pub fn get_screen(_: *Self) Screen {
@@ -185,41 +185,41 @@ pub fn MouseHook(comptime config: Config) type {
         }
 
         pub fn get_monitors(_: *Self) MonitorList {
-            return sender.get_monitors();
+            return simulate_mouse.get_monitors();
         }
 
         pub fn get_monitor(_: *Self, index: u8) ?Monitor {
-            return sender.get_monitor(index);
+            return simulate_mouse.get_monitor(index);
         }
 
         pub fn get_primary_monitor(_: *Self) ?Monitor {
-            return sender.get_primary_monitor();
+            return simulate_mouse.get_primary_monitor();
         }
 
         pub fn get_current_monitor(_: *Self) ?Monitor {
-            return sender.get_current_monitor();
+            return simulate_mouse.get_current_monitor();
         }
 
         pub fn get_monitor_at(_: *Self, x: i32, y: i32) ?Monitor {
-            return sender.get_monitor_at(x, y);
+            return simulate_mouse.get_monitor_at(x, y);
         }
 
         pub fn get_monitor_count(_: *Self) u8 {
-            return sender.get_monitor_count();
+            return simulate_mouse.get_monitor_count();
         }
 
         pub fn center(_: *Self) bool {
             const screen = Screen.get();
             const pos = screen.center();
-            return sender.move_to(pos.x, pos.y);
+            return simulate_mouse.move_to(pos.x, pos.y);
         }
 
         pub fn center_on_monitor(_: *Self, index: u8) bool {
-            return sender.move_to_monitor_center(index);
+            return simulate_mouse.move_to_monitor_center(index);
         }
 
         pub fn center_on_primary(_: *Self) bool {
-            return sender.move_to_primary_center();
+            return simulate_mouse.move_to_primary_center();
         }
 
         pub fn start(self: *Self) !void {

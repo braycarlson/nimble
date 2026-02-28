@@ -1,8 +1,8 @@
 .{
     .name = .nimble,
     .version = "0.0.1",
-    .fingerprint = 0x61915b59d2f0c35a,
     .minimum_zig_version = "0.15.2",
+    .fingerprint = 0x61915b59d2f0c35a,
     .paths = .{
         "src",
         "build.zig",
@@ -10,8 +10,8 @@
     },
     .dependencies = .{
         .raylib = .{
-            .url = "https://github.com/raysan5/raylib/archive/refs/heads/master.tar.gz",
-            .hash = "raylib-5.6.0-dev-whq8uKx3CwUTDAurJ7cefvhJ26KlbKn-OARGApTr7NZ7",
+            .url = "https://github.com/raysan5/raylib/archive/d7c38cfbe43dc9f053eacb219cf9523e9c2372b0.tar.gz",
+            .hash = "raylib-5.6.0-dev-whq8uLMMDQWEEMtFcroNIsLhYOumWXxpuTx9KRc_d67E",
             .lazy = true,
         },
         .zigwin32 = .{

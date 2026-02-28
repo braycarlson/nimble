@@ -4,11 +4,11 @@ const w32 = @import("win32").everything;
 
 const keycode = @import("../keycode.zig");
 const modifier = @import("../modifier.zig");
-const key_sender = @import("../sender/key.zig");
-const mouse_sender = @import("../sender/mouse.zig");
-const message = @import("../sender/message.zig");
+const simulate_key = @import("../simulate/key.zig");
+const simulate_mouse = @import("../simulate/mouse.zig");
+const message = @import("../simulate/message.zig");
 const slot_mod = @import("../registry/slot.zig");
-const typer = @import("../sender/typer.zig");
+const simulate_text = @import("../simulate/text.zig");
 const window = @import("../window.zig");
 
 pub const action_max: u16 = 256;
@@ -52,7 +52,7 @@ pub const Action = struct {
     kind: ActionKind = .key_press,
     key: u8 = 0,
     modifiers: modifier.Set = .{},
-    button: mouse_sender.Button = .left,
+    button: simulate_mouse.Button = .left,
     x: i32 = 0,
     y: i32 = 0,
     scroll_amount: i32 = 0,
@@ -113,7 +113,7 @@ pub const Action = struct {
         return result;
     }
 
-    pub fn mouse_click(button: mouse_sender.Button) Action {
+    pub fn mouse_click(button: simulate_mouse.Button) Action {
         std.debug.assert(button.is_valid());
 
         const result = Action{ .kind = .mouse_click, .button = button };
@@ -123,7 +123,7 @@ pub const Action = struct {
         return result;
     }
 
-    pub fn mouse_down(button: mouse_sender.Button) Action {
+    pub fn mouse_down(button: simulate_mouse.Button) Action {
         std.debug.assert(button.is_valid());
 
         const result = Action{ .kind = .mouse_down, .button = button };
@@ -133,7 +133,7 @@ pub const Action = struct {
         return result;
     }
 
-    pub fn mouse_up(button: mouse_sender.Button) Action {
+    pub fn mouse_up(button: simulate_mouse.Button) Action {
         std.debug.assert(button.is_valid());
 
         const result = Action{ .kind = .mouse_up, .button = button };
@@ -658,7 +658,7 @@ fn execute_key_down(action: *const Action, hwnd: ?w32.HWND) void {
     if (hwnd) |h| {
         message.send_key(h, action.key, true);
     } else {
-        _ = key_sender.key_down(action.key);
+        _ = simulate_key.key_down(action.key);
     }
 }
 
@@ -668,7 +668,7 @@ fn execute_key_up(action: *const Action, hwnd: ?w32.HWND) void {
     if (hwnd) |h| {
         message.send_key(h, action.key, false);
     } else {
-        _ = key_sender.key_up(action.key);
+        _ = simulate_key.key_up(action.key);
     }
 }
 
@@ -676,39 +676,39 @@ fn execute_key_press(action: *const Action, hwnd: ?w32.HWND) void {
     std.debug.assert(action.kind == .key_press);
 
     if (action.modifiers.any()) {
-        _ = key_sender.combination(&action.modifiers, action.key);
+        _ = simulate_key.combination(&action.modifiers, action.key);
     } else if (hwnd) |h| {
         message.send_key_press(h, action.key);
     } else {
-        _ = key_sender.press(action.key);
+        _ = simulate_key.press(action.key);
     }
 }
 
 fn execute_mouse_move(action: *const Action) void {
     std.debug.assert(action.kind == .mouse_move);
 
-    _ = mouse_sender.move_to(action.x, action.y);
+    _ = simulate_mouse.move_to(action.x, action.y);
 }
 
 fn execute_mouse_click(action: *const Action) void {
     std.debug.assert(action.kind == .mouse_click);
     std.debug.assert(action.button.is_valid());
 
-    _ = mouse_sender.click(action.button);
+    _ = simulate_mouse.click(action.button);
 }
 
 fn execute_mouse_down(action: *const Action) void {
     std.debug.assert(action.kind == .mouse_down);
     std.debug.assert(action.button.is_valid());
 
-    _ = mouse_sender.button_down(action.button);
+    _ = simulate_mouse.button_down(action.button);
 }
 
 fn execute_mouse_up(action: *const Action) void {
     std.debug.assert(action.kind == .mouse_up);
     std.debug.assert(action.button.is_valid());
 
-    _ = mouse_sender.button_up(action.button);
+    _ = simulate_mouse.button_up(action.button);
 }
 
 fn execute_mouse_scroll(action: *const Action) void {
@@ -717,11 +717,11 @@ fn execute_mouse_scroll(action: *const Action) void {
     std.debug.assert(action.scroll_amount <= scroll_amount_max);
 
     if (action.scroll_amount > 0) {
-        _ = mouse_sender.scroll_up(@intCast(action.scroll_amount));
+        _ = simulate_mouse.scroll_up(@intCast(action.scroll_amount));
     }
 
     if (action.scroll_amount < 0) {
-        _ = mouse_sender.scroll_down(@intCast(-action.scroll_amount));
+        _ = simulate_mouse.scroll_down(@intCast(-action.scroll_amount));
     }
 }
 
@@ -744,7 +744,7 @@ fn execute_text(action: *const Action, macro: *const Macro, hwnd: ?w32.HWND) voi
     if (hwnd) |h| {
         execute_text_via_message(text, h);
     } else {
-        execute_text_via_typer(text);
+        execute_text_via_simulate(text);
     }
 }
 
@@ -763,6 +763,6 @@ fn execute_text_via_message(text: []const u8, hwnd: w32.HWND) void {
     }
 }
 
-fn execute_text_via_typer(text: []const u8) void {
-    _ = typer.send(text) catch {};
+fn execute_text_via_simulate(text: []const u8) void {
+    _ = simulate_text.send(text) catch {};
 }

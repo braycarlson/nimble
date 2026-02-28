@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const buffer_mod = @import("../buffer/root.zig");
+const circular_mod = @import("../buffer/circular.zig");
 const character = @import("../character.zig");
 const keycode = @import("../keycode.zig");
 const key_event = @import("../event/key.zig");
@@ -26,16 +26,40 @@ pub const Entry = struct {
     id: u32 = 0,
     callback: ?Callback = null,
     context: ?*anyopaque = null,
-    name: [name_max]u8 = [_]u8{0} ** name_max,
-    name_len: u32 = 0,
     active: bool = false,
+    name: [name_max]u8 = undefined,
+    name_len: u8 = 0,
 
     pub fn get_id(self: *const Entry) u32 {
         return self.id;
     }
 
+    pub fn get_callback(self: *const Entry) ?Callback {
+        return self.callback;
+    }
+
+    pub fn get_context(self: *const Entry) ?*anyopaque {
+        return self.context;
+    }
+
     pub fn is_active(self: *const Entry) bool {
         return self.active;
+    }
+
+    pub fn get_name(self: *const Entry) []const u8 {
+        return self.name[0..self.name_len];
+    }
+
+    pub fn invoke(self: *Entry, name: []const u8, args: []const u8) ?Response {
+        std.debug.assert(self.active);
+
+        if (self.callback) |cb| {
+            if (self.context) |ctx| {
+                return cb(ctx, name, args);
+            }
+        }
+
+        return null;
     }
 
     pub fn is_valid(self: *const Entry) bool {
@@ -43,71 +67,44 @@ pub const Entry = struct {
             return true;
         }
 
-        return self.callback != null and self.name_len >= 1 and self.name_len <= name_max and self.id >= 1;
-    }
+        const id_valid = self.id >= 1;
+        const callback_valid = self.callback != null;
+        const context_valid = self.context != null;
+        const name_valid = self.name_len > 0 and self.name_len <= name_max;
 
-    pub fn get_name(self: *const Entry) []const u8 {
-        std.debug.assert(self.active);
-
-        return self.name[0..self.name_len];
-    }
-
-    pub fn matches_name(self: *const Entry, name: []const u8) bool {
-        std.debug.assert(self.active);
-
-        if (name.len != self.name_len) {
-            return false;
-        }
-
-        return std.mem.eql(u8, self.name[0..self.name_len], name);
+        return id_valid and callback_valid and context_valid and name_valid;
     }
 };
 
-pub const ResolveResult = struct {
-    name: []const u8,
-    backspace_count: u32,
-};
-
-pub fn CommandRegistry(comptime capacity: u32) type {
-    if (capacity == 0) {
-        @compileError("CommandRegistry capacity must be at least 1");
-    }
-
-    if (capacity > capacity_max) {
-        @compileError("CommandRegistry capacity exceeds maximum");
-    }
+pub fn CommandRegistry(comptime capacity: u8) type {
+    const Buffer = circular_mod.CircularBuffer(buffer_max);
 
     return struct {
         const Self = @This();
 
-        const RollingBuffer = buffer_mod.RollingBuffer(buffer_max);
-
         entries: [capacity]Entry = [_]Entry{.{}} ** capacity,
-        count: u32 = 0,
-        id_next: u32 = 1,
-
-        buffer: RollingBuffer = RollingBuffer.init(),
-
-        prefix: u8 = ':',
-        resolve_key: u8 = keycode.tab,
-        cancel_key: u8 = keycode.escape,
-        enabled: bool = true,
-
-        last_backspace_count: u32 = 0,
+        count: u8 = 0,
+        next_id: u32 = 1,
+        buffer: Buffer = Buffer.init(),
+        trigger: u8 = ':',
 
         pub fn init() Self {
             return Self{};
         }
 
         pub fn is_valid(self: *const Self) bool {
-            return self.buffer.is_valid() and self.resolve_key != self.cancel_key;
+            const count_valid = self.count <= capacity;
+            const next_id_valid = self.next_id >= 1;
+            const buffer_valid = self.buffer.is_valid();
+
+            return count_valid and next_id_valid and buffer_valid;
         }
 
         pub fn register(
             self: *Self,
             name: []const u8,
             callback: Callback,
-            context: ?*anyopaque,
+            context: anytype,
         ) Error!u32 {
             std.debug.assert(self.is_valid());
 
@@ -115,35 +112,47 @@ pub fn CommandRegistry(comptime capacity: u32) type {
                 return error.InvalidName;
             }
 
-            if (self.find_by_name(name) != null) {
-                return error.AlreadyRegistered;
+            for (name) |c| {
+                if (!std.ascii.isAlphanumeric(c) and c != '_') {
+                    return error.InvalidName;
+                }
+            }
+
+            for (&self.entries) |*entry| {
+                if (entry.active and std.mem.eql(u8, entry.get_name(), name)) {
+                    return error.AlreadyRegistered;
+                }
             }
 
             const slot = self.find_empty_slot() orelse return error.RegistryFull;
 
+            const id = self.next_id;
+            self.next_id += 1;
+
             self.entries[slot] = Entry{
-                .id = self.id_next,
+                .id = id,
                 .callback = callback,
-                .context = context,
-                .name = [_]u8{0} ** name_max,
-                .name_len = @intCast(name.len),
+                .context = @ptrCast(@alignCast(context)),
                 .active = true,
+                .name = undefined,
+                .name_len = @intCast(name.len),
             };
 
             @memcpy(self.entries[slot].name[0..name.len], name);
 
-            self.id_next += 1;
             self.count += 1;
 
-            return self.entries[slot].id;
+            std.debug.assert(self.entries[slot].is_valid());
+
+            return id;
         }
 
         pub fn unregister(self: *Self, id: u32) Error!void {
             std.debug.assert(id >= 1);
 
-            for (&self.entries) |*e| {
-                if (e.active and e.id == id) {
-                    e.active = false;
+            for (&self.entries) |*entry| {
+                if (entry.id == id and entry.active) {
+                    entry.active = false;
                     self.count -= 1;
                     return;
                 }
@@ -152,154 +161,117 @@ pub fn CommandRegistry(comptime capacity: u32) type {
             return error.NotFound;
         }
 
-        pub fn process(self: *Self, key: *const Key) ?Response {
+        pub fn process(self: *Self, key: *const Key) Response {
             std.debug.assert(self.is_valid());
 
-            if (!self.enabled or !key.down) {
-                return null;
+            if (!key.down) {
+                return .pass;
             }
 
-            if (key.value == self.cancel_key) {
-                self.reset();
-                return null;
+            const c = character.from_keycode(key.value);
+
+            if (c == 0) {
+                if (key.value == keycode.back) {
+                    _ = self.buffer.pop();
+                }
+                return .pass;
             }
 
-            if (key.value == self.resolve_key) {
-                return self.resolve();
-            }
-
-            if (self.invalidates_buffer(key)) {
-                self.reset();
-                return null;
-            }
-
-            if (key.value == keycode.back) {
-                _ = self.buffer.pop();
-                return null;
-            }
-
-            if (key.value == keycode.space) {
-                self.buffer.push(' ');
-                return null;
-            }
+            self.buffer.push(c);
 
             if (key.value == keycode.@"return") {
-                self.buffer.push('\n');
-                return null;
+                const result = self.try_execute();
+                self.buffer.clear();
+                return result;
             }
 
-            if (character.from_key(key)) |c| {
-                self.buffer.push(c);
-            }
-
-            return null;
+            return .pass;
         }
 
-        fn resolve(self: *Self) ?Response {
-            if (self.buffer.is_empty()) {
-                return null;
+        fn try_execute(self: *Self) Response {
+            std.debug.assert(self.is_valid());
+
+            const len = self.buffer.length();
+
+            if (len < 2) {
+                return .pass;
             }
 
-            const result = self.find_command_at_end() orelse return null;
+            const first = self.buffer.get(0) orelse return .pass;
 
-            self.last_backspace_count = result.backspace_count;
-
-            self.reset();
-
-            const entry = self.find_by_name(result.name) orelse return null;
-            const callback = entry.callback orelse return null;
-            const context = entry.context orelse return null;
-
-            return callback(context, result.name, &[_]u8{});
-        }
-
-        fn find_command_at_end(self: *Self) ?ResolveResult {
-            const text = self.buffer.slice();
-
-            if (text.len == 0) {
-                return null;
+            if (first != self.trigger) {
+                return .pass;
             }
 
-            var prefix_pos: ?u32 = null;
-            var i: u32 = @intCast(text.len);
+            var name_end: u32 = 1;
 
-            while (i > 0) {
-                i -= 1;
+            while (name_end < len) : (name_end += 1) {
+                const c = self.buffer.get(name_end) orelse break;
 
-                const c = text[i];
-
-                if (character.is_whitespace(c)) {
-                    break;
-                }
-
-                if (c == self.prefix) {
-                    prefix_pos = i;
+                if (c == ' ' or c == '\r' or c == '\n') {
                     break;
                 }
             }
 
-            if (prefix_pos == null) {
-                return null;
+            if (name_end <= 1) {
+                return .pass;
             }
 
-            const cmd_start = prefix_pos.? + 1;
+            var name_buf: [name_max]u8 = undefined;
+            const name_len = name_end - 1;
 
-            if (cmd_start >= text.len) {
-                return null;
+            if (name_len > name_max) {
+                return .pass;
             }
 
-            const cmd_name = self.buffer.slice_from(cmd_start);
-
-            if (cmd_name.len == 0 or cmd_name.len > name_max) {
-                return null;
+            for (0..name_len) |i| {
+                name_buf[i] = self.buffer.get(@intCast(i + 1)) orelse return .pass;
             }
 
-            if (!self.is_registered(cmd_name)) {
-                return null;
-            }
+            const name = name_buf[0..name_len];
 
-            return ResolveResult{
-                .name = cmd_name,
-                .backspace_count = @intCast(text.len - prefix_pos.?),
-            };
-        }
+            var args_start = name_end;
 
-        fn invalidates_buffer(self: *Self, key: *const Key) bool {
-            _ = self;
+            while (args_start < len) : (args_start += 1) {
+                const c = self.buffer.get(args_start) orelse break;
 
-            if (key.modifiers.ctrl() or key.modifiers.alt()) {
-                return true;
-            }
-
-            return switch (key.value) {
-                keycode.left, keycode.right, keycode.up, keycode.down => true,
-                keycode.home, keycode.end, keycode.prior, keycode.next => true,
-                keycode.insert, keycode.delete => true,
-                else => false,
-            };
-        }
-
-        fn reset(self: *Self) void {
-            self.buffer.clear();
-        }
-
-        fn is_registered(self: *Self, name: []const u8) bool {
-            return self.find_by_name(name) != null;
-        }
-
-        fn find_by_name(self: *Self, name: []const u8) ?*const Entry {
-            for (&self.entries) |*e| {
-                if (e.active and e.matches_name(name)) {
-                    return e;
+                if (c != ' ') {
+                    break;
                 }
             }
 
-            return null;
+            var args_buf: [buffer_max]u8 = undefined;
+            var args_len: u32 = 0;
+
+            var i = args_start;
+
+            while (i < len and args_len < buffer_max) : (i += 1) {
+                const c = self.buffer.get(i) orelse break;
+
+                if (c == '\r' or c == '\n') {
+                    break;
+                }
+
+                args_buf[args_len] = c;
+                args_len += 1;
+            }
+
+            const args = args_buf[0..args_len];
+
+            for (&self.entries) |*entry| {
+                if (entry.active and std.mem.eql(u8, entry.get_name(), name)) {
+                    if (entry.invoke(name, args)) |response| {
+                        return response;
+                    }
+                }
+            }
+
+            return .pass;
         }
 
-        fn find_empty_slot(self: *Self) ?u32 {
-            for (self.entries, 0..) |e, i| {
-                if (!e.active) {
+        fn find_empty_slot(self: *const Self) ?u8 {
+            for (0..capacity) |i| {
+                if (!self.entries[i].active) {
                     return @intCast(i);
                 }
             }
@@ -307,32 +279,13 @@ pub fn CommandRegistry(comptime capacity: u32) type {
             return null;
         }
 
-        pub fn get_last_backspace_count(self: *Self) u32 {
-            return self.last_backspace_count;
-        }
-
-        pub fn set_enabled(self: *Self, value: bool) void {
-            self.enabled = value;
-        }
-
-        pub fn set_prefix(self: *Self, char: u8) void {
-            self.prefix = char;
-        }
-
-        pub fn set_resolve_key(self: *Self, value: u8) void {
-            std.debug.assert(value != self.cancel_key);
-
-            self.resolve_key = value;
-        }
-
         pub fn clear(self: *Self) void {
-            self.reset();
-
-            for (&self.entries) |*e| {
-                e.active = false;
+            for (&self.entries) |*entry| {
+                entry.active = false;
             }
 
             self.count = 0;
+            self.buffer.clear();
         }
     };
 }
