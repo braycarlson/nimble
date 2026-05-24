@@ -15,7 +15,7 @@
             .lazy = true,
         },
         .zigwin32 = .{
-            .url = "https://github.com/marlersoft/zigwin32/archive/refs/heads/main.tar.gz",
+            .url = "https://github.com/marlersoft/zigwin32/archive/ec98bb4d9eea532320a8551720a9e3ec6de64994.tar.gz",
             .hash = "win32-25.0.28-preview-mX5pFWMt5QPTVIGh3r2-OpPunpcCCjApyRbA6Zn6WALH",
         },
     },
