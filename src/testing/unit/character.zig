@@ -6,7 +6,7 @@ const keycode = input.keycode;
 const modifier = input.modifier;
 const event = input.event;
 
-const Key = event.Key;
+const Key = event.key.Key;
 
 const testing = std.testing;
 

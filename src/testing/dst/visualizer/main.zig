@@ -194,10 +194,8 @@ pub const State = struct {
     }
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
 
     c.SetConfigFlags(c.FLAG_MSAA_4X_HINT | c.FLAG_WINDOW_RESIZABLE);
     c.InitWindow(default_window_width, default_window_height, "DST Visualizer");
@@ -215,8 +213,7 @@ pub fn main() !void {
     var state = State.init(screen_width, screen_height);
     defer state.deinit(allocator);
 
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
 
     if (args.len > 1) {
         state.load_recording(allocator, args[1]) catch |err| {

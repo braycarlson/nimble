@@ -72,6 +72,9 @@ pub const clipboard = @import("clipboard.zig");
 pub const monitor = @import("monitor.zig");
 pub const binding = @import("binding.zig");
 pub const character = @import("character.zig");
+pub const timer = @import("timer.zig");
+
+pub const Mutex = @import("mutex.zig").Mutex;
 
 pub const Keyboard = keyboard.KeyboardHook;
 pub const KeyboardConfig = keyboard.Config;

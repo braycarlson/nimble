@@ -87,6 +87,7 @@ pub fn CommandRegistry(comptime capacity: u8) type {
         next_id: u32 = 1,
         buffer: Buffer = Buffer.init(),
         trigger: u8 = ':',
+        enabled: bool = true,
 
         pub fn init() Self {
             return Self{};
@@ -163,6 +164,10 @@ pub fn CommandRegistry(comptime capacity: u8) type {
 
         pub fn process(self: *Self, key: *const Key) Response {
             std.debug.assert(self.is_valid());
+
+            if (!self.enabled) {
+                return .pass;
+            }
 
             if (!key.down) {
                 return .pass;

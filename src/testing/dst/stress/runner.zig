@@ -1,6 +1,8 @@
 const std = @import("std");
 const common = @import("common");
 
+const w32 = @import("win32").everything;
+
 const dst = @import("dst");
 const StressVOPR = dst.stress.StressVOPR;
 const StressVOPRConfig = dst.stress.StressVOPRConfig;
@@ -28,12 +30,10 @@ pub const RunnerConfig = struct {
     compare_mode: bool = false,
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
 
-    const config = try parse_args(allocator);
+    const config = try parse_args(init.minimal.args, allocator);
     defer {
         if (config.output_path) |p| allocator.free(p);
         if (config.replay_path) |p| allocator.free(p);
@@ -48,9 +48,9 @@ pub fn main() !void {
     }
 }
 
-fn parse_args(allocator: std.mem.Allocator) !RunnerConfig {
+fn parse_args(args: std.process.Args, allocator: std.mem.Allocator) !RunnerConfig {
     var config = RunnerConfig{};
-    var parser = try common.ArgParser.init(allocator);
+    var parser = try common.ArgParser.init(args, allocator);
     defer parser.deinit();
 
     while (parser.next()) |arg| {
@@ -114,9 +114,9 @@ fn run_stress_vopr(allocator: std.mem.Allocator, config: RunnerConfig) !void {
     });
     defer vopr.deinit();
 
-    const start_time = std.time.milliTimestamp();
+    const start_time: i64 = @intCast(w32.GetTickCount64());
     vopr.run();
-    const end_time = std.time.milliTimestamp();
+    const end_time: i64 = @intCast(w32.GetTickCount64());
 
     const stats = vopr.get_stats();
     const stress_state = vopr.get_stress_state();
@@ -247,9 +247,9 @@ fn run_comparison(allocator: std.mem.Allocator, config: RunnerConfig) !void {
     });
     defer legacy_vopr.deinit();
 
-    const legacy_start = std.time.milliTimestamp();
+    const legacy_start: i64 = @intCast(w32.GetTickCount64());
     legacy_vopr.run();
-    const legacy_end = std.time.milliTimestamp();
+    const legacy_end: i64 = @intCast(w32.GetTickCount64());
     const legacy_stats = legacy_vopr.get_stats();
 
     common.print_section("Running Resilient Queue...");
@@ -268,9 +268,9 @@ fn run_comparison(allocator: std.mem.Allocator, config: RunnerConfig) !void {
     });
     defer resilient_vopr.deinit();
 
-    const resilient_start = std.time.milliTimestamp();
+    const resilient_start: i64 = @intCast(w32.GetTickCount64());
     resilient_vopr.run();
-    const resilient_end = std.time.milliTimestamp();
+    const resilient_end: i64 = @intCast(w32.GetTickCount64());
     const resilient_stats = resilient_vopr.get_stats();
 
     common.print_section("Comparison Results");

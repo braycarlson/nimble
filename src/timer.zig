@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const w32 = @import("win32").everything;
+
 const slot_mod = @import("registry/slot.zig");
 
 pub const capacity_default: u8 = 16;
@@ -130,7 +132,7 @@ pub fn TimerRegistry(comptime capacity: u8) type {
 
             entry.running = true;
             entry.fired = false;
-            entry.last_tick = std.time.milliTimestamp();
+            entry.last_tick = @intCast(w32.GetTickCount64());
         }
 
         pub fn stop(self: *Self, id: u32) Error!void {
@@ -153,7 +155,7 @@ pub fn TimerRegistry(comptime capacity: u8) type {
                 return 0;
             }
 
-            const now = std.time.milliTimestamp();
+            const now: i64 = @intCast(w32.GetTickCount64());
             var fired: u8 = 0;
 
             var i: u32 = 0;
@@ -228,7 +230,7 @@ pub fn TimerRegistry(comptime capacity: u8) type {
                 return null;
             }
 
-            const now = std.time.milliTimestamp();
+            const now: i64 = @intCast(w32.GetTickCount64());
 
             if (now < entry.last_tick) {
                 return entry.interval_ms;

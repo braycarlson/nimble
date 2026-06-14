@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const w32 = @import("win32").everything;
+
 const key_event = @import("../event/key.zig");
 const response_mod = @import("../response.zig");
 const base_mod = @import("../registry/base.zig");
@@ -100,13 +102,13 @@ pub const Entry = struct {
                     return false;
                 }
 
-                const now = std.time.milliTimestamp();
+                const now: i64 = @intCast(w32.GetTickCount64());
                 const elapsed: u64 = @intCast(now - self.start_time);
 
                 return elapsed < self.duration_ms;
             },
             .until_time => {
-                const now = std.time.milliTimestamp();
+                const now: i64 = @intCast(w32.GetTickCount64());
                 return now < self.end_time;
             },
             .toggle => {
@@ -218,7 +220,7 @@ pub fn TimedRegistry(comptime capacity: u32) type {
                 .end_time = options.end_time,
                 .max_count = options.max_count,
                 .expired = false,
-                .start_time = if (options.mode == .until_time) std.time.milliTimestamp() else 0,
+                .start_time = if (options.mode == .until_time) @intCast(w32.GetTickCount64()) else 0,
                 .current_count = 0,
             };
 
@@ -282,7 +284,7 @@ pub fn TimedRegistry(comptime capacity: u32) type {
             std.debug.assert(entry.is_active());
 
             if (entry.mode == .duration) {
-                entry.start_time = std.time.milliTimestamp();
+                entry.start_time = @intCast(w32.GetTickCount64());
             }
 
             entry.set_enabled(true);
@@ -313,7 +315,7 @@ pub fn TimedRegistry(comptime capacity: u32) type {
                 entry.set_enabled(false);
             } else {
                 if (entry.mode == .duration) {
-                    entry.start_time = std.time.milliTimestamp();
+                    entry.start_time = @intCast(w32.GetTickCount64());
                 }
 
                 entry.set_enabled(true);

@@ -1,9 +1,10 @@
-# toolkit
+# nimble
 *.json
 .zig-cache/
 examples/
 recordings/
 zig-out/
+zig-pkg/
 
 # Binaries for programs and plugins
 *.exe

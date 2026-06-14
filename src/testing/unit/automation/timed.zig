@@ -1,7 +1,7 @@
 const std = @import("std");
 const input = @import("input");
 
-const timed_mod = input.automation.timed;
+const timed_mod = input.registry.timed;
 
 const Mode = timed_mod.Mode;
 const Options = timed_mod.Options;

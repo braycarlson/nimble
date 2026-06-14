@@ -5,8 +5,8 @@ const builder = input.builder;
 const keycode = input.keycode;
 const modifier = input.modifier;
 
-const parse = builder.parse;
-const ParsedPattern = builder.ParsedPattern;
+const parse = builder.pattern.parse;
+const ParsedPattern = builder.pattern.ParsedPattern;
 
 const testing = std.testing;
 

@@ -381,7 +381,7 @@ export fn get_events_at_tick_count(tick: u32) u32 {
 }
 
 export fn get_event_at_tick_by_index(tick: u32, index: u32) u32 {
-    assert(tick <= MAX_TICK);
+    assert(tick <= max_tick);
 
     if (events.get_at_tick_by_index(tick, index)) |event| {
         return (@as(u32, @intFromEnum(event.kind)) << 8) | @as(u32, event.data & 0xFF);

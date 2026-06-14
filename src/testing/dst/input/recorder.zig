@@ -71,7 +71,7 @@ pub const Recorder = struct {
 
         const result = Recorder{
             .allocator = allocator,
-            .buffer = .{},
+            .buffer = .empty,
             .format = format,
         };
 
@@ -122,8 +122,7 @@ pub const Recorder = struct {
 
         std.debug.assert(header.extra.is_valid());
 
-        var writer = self.buffer.writer(self.allocator);
-        try writer.writeAll(std.mem.asBytes(&header));
+        try self.buffer.appendSlice(self.allocator, std.mem.asBytes(&header));
 
         const events_len: u32 = @intCast(vopr.state_checker.events_len);
         const len = @min(events_len, iteration_max);
@@ -131,7 +130,7 @@ pub const Recorder = struct {
         for (vopr.state_checker.events[0..len]) |event| {
             std.debug.assert(event.is_valid());
 
-            try writer.writeAll(std.mem.asBytes(&event));
+            try self.buffer.appendSlice(self.allocator, std.mem.asBytes(&event));
         }
     }
 
@@ -202,10 +201,10 @@ pub const Recorder = struct {
         std.debug.assert(self.is_valid());
         std.debug.assert(path.len > 0);
 
-        const file = try std.fs.cwd().createFile(path, .{});
-        defer file.close();
+        var threaded: std.Io.Threaded = .init_single_threaded;
+        const io = threaded.io();
 
-        try file.writeAll(self.buffer.items);
+        try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = self.buffer.items });
     }
 };
 
@@ -240,10 +239,10 @@ pub const Recording = struct {
         std.debug.assert(@intFromPtr(&allocator) != 0);
         std.debug.assert(path.len > 0);
 
-        const file = try std.fs.cwd().openFile(path, .{});
-        defer file.close();
+        var threaded: std.Io.Threaded = .init_single_threaded;
+        const io = threaded.io();
 
-        const content = try file.readToEndAlloc(allocator, file_size_max);
+        const content = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(file_size_max));
         defer allocator.free(content);
 
         std.debug.assert(content.len > 0);

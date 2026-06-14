@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const w32 = @import("win32").everything;
+
 const common = @import("common.zig");
 const input_test = @import("input.zig");
 const registry_fuzz = @import("registry.zig");
@@ -92,11 +94,11 @@ pub const Config = struct {
         return result;
     }
 
-    pub fn parse(allocator: std.mem.Allocator) Config {
+    pub fn parse(process_args: std.process.Args, allocator: std.mem.Allocator) Config {
         std.debug.assert(@intFromPtr(&allocator) != 0);
 
-        var args = std.process.argsWithAllocator(allocator) catch {
-            return default_config(allocator);
+        var args = process_args.iterateAllocator(allocator) catch {
+            return default_config();
         };
 
         defer args.deinit();
@@ -104,7 +106,7 @@ pub const Config = struct {
         _ = args.skip();
 
         var config = Config{
-            .seed = common.get_seed_from_env(allocator),
+            .seed = common.get_seed_from_env(),
             .mode = .full,
             .iterations = Mode.full.default_iterations(),
             .duration_seconds = null,
@@ -117,9 +119,9 @@ pub const Config = struct {
         return config;
     }
 
-    fn default_config(allocator: std.mem.Allocator) Config {
+    fn default_config() Config {
         const result = Config{
-            .seed = common.get_seed_from_env(allocator),
+            .seed = common.get_seed_from_env(),
             .mode = .full,
             .iterations = Mode.full.default_iterations(),
             .duration_seconds = null,
@@ -196,25 +198,21 @@ fn parse_argument_duration(arg: []const u8) ?u64 {
     return result;
 }
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-
-    defer _ = gpa.deinit();
-
-    const allocator = gpa.allocator();
-    const config = Config.parse(allocator);
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
+    const config = Config.parse(init.minimal.args, allocator);
 
     std.debug.assert(config.is_valid());
 
     print_header(&config);
 
-    var timer = std.time.Timer.start() catch @panic("timer failed");
+    const start_ms: i64 = @intCast(w32.GetTickCount64());
     var prng = std.Random.DefaultPrng.init(config.seed);
     var sim = Simulator.init(config.seed);
 
-    const result = run_fuzzer(&config, &prng, &sim, &timer);
+    const result = run_fuzzer(&config, &prng, &sim, start_ms);
 
-    print_footer(&result, &timer);
+    print_footer(&result, start_ms);
 
     if (result.sim_failures > 0) {
         std.process.exit(1);
@@ -237,11 +235,11 @@ fn print_header(config: *const Config) void {
     std.debug.print("\n", .{});
 }
 
-fn print_footer(result: *const FuzzerResult, timer: *std.time.Timer) void {
+fn print_footer(result: *const FuzzerResult, start_ms: i64) void {
     std.debug.assert(@intFromPtr(result) != 0);
-    std.debug.assert(@intFromPtr(timer) != 0);
 
-    const elapsed_ms = timer.read() / std.time.ns_per_ms;
+    const now_ms: i64 = @intCast(w32.GetTickCount64());
+    const elapsed_ms: i64 = now_ms - start_ms;
 
     std.debug.print("\nFuzzer: Completed\n", .{});
     std.debug.print("Iteration(s): {d}\n", .{result.iterations});
@@ -255,7 +253,7 @@ fn print_footer(result: *const FuzzerResult, timer: *std.time.Timer) void {
     }
 }
 
-fn run_fuzzer(config: *const Config, prng: *std.Random.DefaultPrng, sim: *Simulator, timer: *std.time.Timer) FuzzerResult {
+fn run_fuzzer(config: *const Config, prng: *std.Random.DefaultPrng, sim: *Simulator, start_ms: i64) FuzzerResult {
     std.debug.assert(@intFromPtr(config) != 0);
     std.debug.assert(@intFromPtr(prng) != 0);
     std.debug.assert(@intFromPtr(sim) != 0);
@@ -280,7 +278,7 @@ fn run_fuzzer(config: *const Config, prng: *std.Random.DefaultPrng, sim: *Simula
         run_legacy_tests(iter_seed, config.mode) catch {};
 
         if (iteration > 0 and iteration % progress_interval == 0) {
-            const elapsed_ms = timer.read() / std.time.ns_per_ms;
+            const elapsed_ms: i64 = @as(i64, @intCast(w32.GetTickCount64())) - start_ms;
 
             std.debug.print("Progress: {d} iterations in {d} ms\n", .{ iteration, elapsed_ms });
         }

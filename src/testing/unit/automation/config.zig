@@ -1,7 +1,7 @@
 const std = @import("std");
 const input = @import("input");
 
-const config = input.automation.config;
+const config = input.registry.config;
 const keycode = input.keycode;
 const modifier = input.modifier;
 

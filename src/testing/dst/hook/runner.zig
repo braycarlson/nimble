@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const w32 = @import("win32").everything;
+
 const common = @import("common");
 const simulator = @import("simulator.zig");
 const recorder_mod = @import("recorder.zig");
@@ -37,12 +39,10 @@ pub const RunnerConfig = struct {
     }
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
 
-    const config = try parse_args(allocator);
+    const config = try parse_args(init.minimal.args, allocator);
     defer {
         if (config.output_path) |p| allocator.free(p);
         if (config.replay_path) |p| allocator.free(p);
@@ -58,9 +58,9 @@ pub fn main() !void {
     }
 }
 
-fn parse_args(allocator: std.mem.Allocator) !RunnerConfig {
+fn parse_args(args: std.process.Args, allocator: std.mem.Allocator) !RunnerConfig {
     var config = RunnerConfig{};
-    var parser = try common.ArgParser.init(allocator);
+    var parser = try common.ArgParser.init(args, allocator);
     defer parser.deinit();
 
     var iteration: u32 = 0;
@@ -118,9 +118,9 @@ fn run_simulator(allocator: std.mem.Allocator, config: RunnerConfig) !void {
 
     std.debug.assert(sim.is_valid());
 
-    const start_time = std.time.milliTimestamp();
+    const start_time: i64 = @intCast(w32.GetTickCount64());
     sim.run();
-    const end_time = std.time.milliTimestamp();
+    const end_time: i64 = @intCast(w32.GetTickCount64());
 
     std.debug.assert(sim.is_valid());
 

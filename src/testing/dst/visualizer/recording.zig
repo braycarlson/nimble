@@ -115,13 +115,10 @@ fn get_array(obj: std.json.ObjectMap, key: []const u8) LoadError!std.json.Array 
 pub fn load(allocator: std.mem.Allocator, path: []const u8) !Data {
     std.debug.assert(path.len > 0);
 
-    const file = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    const io = threaded.io();
 
-    const file_size = try file.getEndPos();
-    std.debug.assert(file_size <= max_file_size);
-
-    const content = try file.readToEndAlloc(allocator, max_file_size);
+    const content = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(max_file_size));
     defer allocator.free(content);
 
     const parsed = std.json.parseFromSlice(std.json.Value, allocator, content, .{}) catch {

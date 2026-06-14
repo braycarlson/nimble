@@ -176,22 +176,22 @@ test "CommandRegistry: enabled field controls processing" {
     try std.testing.expect(registry.enabled);
 }
 
-test "CommandRegistry: set_prefix updates prefix" {
+test "CommandRegistry: trigger field updates" {
     var registry = CommandRegistry(8).init();
 
-    registry.set_prefix('/');
+    registry.trigger = '/';
 
-    try std.testing.expectEqual(@as(u8, '/'), registry.prefix);
+    try std.testing.expectEqual(@as(u8, '/'), registry.trigger);
 
-    registry.set_prefix('!');
+    registry.trigger = '!';
 
-    try std.testing.expectEqual(@as(u8, '!'), registry.prefix);
+    try std.testing.expectEqual(@as(u8, '!'), registry.trigger);
 }
 
-test "CommandRegistry: default prefix is colon" {
+test "CommandRegistry: default trigger is colon" {
     const registry = CommandRegistry(8).init();
 
-    try std.testing.expectEqual(@as(u8, ':'), registry.prefix);
+    try std.testing.expectEqual(@as(u8, ':'), registry.trigger);
 }
 
 test "Entry: default state" {

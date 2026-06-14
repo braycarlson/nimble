@@ -1,7 +1,7 @@
 const std = @import("std");
 const input = @import("input");
 
-const oneshot = input.automation.oneshot;
+const oneshot = input.registry.oneshot;
 const key_event = input.event.key;
 const response_mod = input.response;
 

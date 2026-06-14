@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const w32 = @import("win32").everything;
+
 const common = @import("common");
 const state_mod = @import("state.zig");
 const simulator = @import("simulator.zig");
@@ -47,12 +49,9 @@ pub const RunnerConfig = struct {
     }
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    const allocator = gpa.allocator();
-    const config = try parse_args(allocator);
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
+    const config = try parse_args(init.minimal.args, allocator);
 
     std.debug.assert(config.is_valid());
 
@@ -80,11 +79,11 @@ fn free_config_strings(allocator: std.mem.Allocator, config: *const RunnerConfig
     }
 }
 
-fn parse_args(allocator: std.mem.Allocator) !RunnerConfig {
+fn parse_args(args: std.process.Args, allocator: std.mem.Allocator) !RunnerConfig {
     std.debug.assert(@intFromPtr(&allocator) != 0);
 
     var config = RunnerConfig{};
-    var parser = try common.ArgParser.init(allocator);
+    var parser = try common.ArgParser.init(args, allocator);
     defer parser.deinit();
 
     var iterations: u32 = 0;
@@ -202,9 +201,9 @@ fn run_vopr(allocator: std.mem.Allocator, config: RunnerConfig) !void {
     var vopr = VOPR.init(vopr_config);
     defer vopr.deinit();
 
-    const start_time = std.time.milliTimestamp();
+    const start_time: i64 = @intCast(w32.GetTickCount64());
     const result = vopr.run();
-    const end_time = std.time.milliTimestamp();
+    const end_time: i64 = @intCast(w32.GetTickCount64());
 
     std.debug.assert(vopr.is_valid());
 

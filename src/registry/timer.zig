@@ -193,7 +193,7 @@ pub fn TimerRegistry(comptime capacity: u32) type {
             }
 
             self.base.slot.entries[slot].running = true;
-            self.base.slot.entries[slot].last_tick = std.time.milliTimestamp();
+            self.base.slot.entries[slot].last_tick = @intCast(w32.GetTickCount64());
         }
 
         pub fn stop(self: *Self, id: u32) Error!void {
@@ -273,7 +273,7 @@ pub fn TimerRegistry(comptime capacity: u32) type {
                     if (!e.running) {
                         e.running = true;
                         e.fired = false;
-                        e.last_tick = std.time.milliTimestamp();
+                        e.last_tick = @intCast(w32.GetTickCount64());
                     }
                 } else {
                     e.running = false;
@@ -291,7 +291,7 @@ pub fn TimerRegistry(comptime capacity: u32) type {
                 self.base.lock();
                 defer self.base.unlock();
 
-                const now = std.time.milliTimestamp();
+                const now: i64 = @intCast(w32.GetTickCount64());
                 const entries = self.base.entries();
 
                 for (entries) |*e| {

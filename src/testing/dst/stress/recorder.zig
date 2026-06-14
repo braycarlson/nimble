@@ -89,7 +89,7 @@ pub const Recorder = struct {
     pub fn init(allocator: std.mem.Allocator) Recorder {
         return .{
             .allocator = allocator,
-            .buffer = .{},
+            .buffer = .empty,
         };
     }
 
@@ -211,10 +211,10 @@ pub const Recorder = struct {
         assert(path.len > 0);
         assert(self.buffer.items.len > 0);
 
-        const file = try std.fs.cwd().createFile(path, .{});
-        defer file.close();
+        var threaded: std.Io.Threaded = .init_single_threaded;
+        const io = threaded.io();
 
-        try file.writeAll(self.buffer.items);
+        try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = self.buffer.items });
     }
 };
 
@@ -234,10 +234,10 @@ pub const Recording = struct {
     pub fn load_from_file(allocator: std.mem.Allocator, path: []const u8) !Recording {
         assert(path.len > 0);
 
-        const file = try std.fs.cwd().openFile(path, .{});
-        defer file.close();
+        var threaded: std.Io.Threaded = .init_single_threaded;
+        const io = threaded.io();
 
-        const content = try file.readToEndAlloc(allocator, max_recording_size);
+        const content = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(max_recording_size));
         defer allocator.free(content);
 
         assert(content.len > 0);

@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const w32 = @import("win32").everything;
+
 const keycode = @import("../keycode.zig");
 const message = @import("message.zig");
 const window = @import("../window.zig");
@@ -39,7 +41,7 @@ fn _send(text: []const u8, delay_ms: u32) Error!u32 {
         sent += 1;
 
         if (delay_ms > 0) {
-            std.Thread.sleep(delay_ms * std.time.ns_per_ms);
+            w32.Sleep(delay_ms);
         }
     }
 

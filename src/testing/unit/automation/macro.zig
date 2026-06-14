@@ -1,7 +1,7 @@
 const std = @import("std");
 const input = @import("input");
 
-const macro_mod = input.automation.macro;
+const macro_mod = input.registry.macro;
 const modifier = input.modifier;
 
 const ActionKind = macro_mod.ActionKind;

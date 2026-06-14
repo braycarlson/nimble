@@ -1,7 +1,7 @@
 const std = @import("std");
 const input = @import("input");
 
-const repeat = input.automation.repeat;
+const repeat = input.registry.repeat;
 
 const RepeatRegistry = repeat.RepeatRegistry;
 const Entry = repeat.Entry;

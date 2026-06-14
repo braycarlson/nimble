@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const w32 = @import("win32").everything;
+const Mutex = @import("mutex.zig").Mutex;
 
 const primitive = @import("hook.zig");
 const keycode = @import("keycode.zig");
@@ -81,7 +82,7 @@ pub fn KeyboardHook(comptime config: Config) type {
         keyboard: KeyboardState = KeyboardState.init(),
         blocked: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
         running: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
-        mutex: std.Thread.Mutex = .{},
+        mutex: Mutex = .{},
         hook_handle: ?primitive.Hook = null,
         module_handle: ?w32.HINSTANCE = null,
         key_callback: ?KeyCallback = null,
@@ -331,7 +332,7 @@ pub fn KeyboardHook(comptime config: Config) type {
             }
 
             if (parsed.down) {
-                const now_ms = std.time.milliTimestamp();
+                const now_ms: i64 = @intCast(w32.GetTickCount64());
 
                 const chord_response = self.chord_registry.process(&key, now_ms);
 

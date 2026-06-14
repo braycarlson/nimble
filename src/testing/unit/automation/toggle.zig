@@ -1,7 +1,7 @@
 const std = @import("std");
 const input = @import("input");
 
-const toggle = input.automation.toggle;
+const toggle = input.registry.toggle;
 const key_event = input.event.key;
 const response_mod = input.response;
 const filter_mod = input.filter;

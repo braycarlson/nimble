@@ -38,6 +38,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    common_module.addImport("win32", win32);
+
     const dst_module = b.createModule(.{
         .root_source_file = b.path("src/testing/dst/root.zig"),
         .target = target,
@@ -241,7 +243,7 @@ fn add_visualizer(
     });
 
     const exe = b.addExecutable(.{ .name = "visualizer", .root_module = module });
-    exe.linkLibrary(raylib_dep.?.artifact("raylib"));
+    module.linkLibrary(raylib_dep.?.artifact("raylib"));
 
     const install = b.addInstallArtifact(exe, .{});
     step.dependOn(&install.step);
@@ -294,12 +296,14 @@ fn add_examples(
 ) void {
     const step = b.step("examples", "Build all examples");
 
-    var dir = std.fs.cwd().openDir("examples", .{ .iterate = true }) catch return;
-    defer dir.close();
+    const io = b.graph.io;
+
+    var dir = b.build_root.handle.openDir(io, "examples", .{ .iterate = true }) catch return;
+    defer dir.close(io);
 
     var iter = dir.iterate();
 
-    while (iter.next() catch null) |entry| {
+    while (iter.next(io) catch null) |entry| {
         if (entry.kind != .file) {
             continue;
         }
@@ -317,16 +321,16 @@ fn add_examples(
             .root_source_file = b.path(path),
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
         });
 
         module.addImport("nimble", nimble);
         module.addImport("win32", win32);
 
         const exe = b.addExecutable(.{ .name = name, .root_module = module });
-        exe.linkLibC();
-        exe.linkSystemLibrary("user32");
-        exe.linkSystemLibrary("gdi32");
-        exe.linkSystemLibrary("shell32");
+        module.linkSystemLibrary("user32", .{});
+        module.linkSystemLibrary("gdi32", .{});
+        module.linkSystemLibrary("shell32", .{});
 
         const install = b.addInstallArtifact(exe, .{});
         step.dependOn(&install.step);

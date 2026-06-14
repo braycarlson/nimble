@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const w32 = @import("win32").everything;
+const Mutex = @import("mutex.zig").Mutex;
 
 const primitive = @import("hook.zig");
 const response_mod = @import("response.zig");
@@ -38,7 +39,7 @@ pub fn MouseHook(comptime config: Config) type {
 
         registry: Registry = Registry.init(),
         running: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
-        mutex: std.Thread.Mutex = .{},
+        mutex: Mutex = .{},
         hook_handle: ?primitive.Hook = null,
         module_handle: ?w32.HINSTANCE = null,
         blocked: bool = false,

@@ -1,20 +1,22 @@
 const std = @import("std");
 
+const w32 = @import("win32").everything;
+
 pub const iteration_max: u32 = 0xFFFFFFFF;
 pub const arg_max: u32 = 256;
 
 pub const ArgParser = struct {
-    args: std.process.ArgIterator,
+    args: std.process.Args.Iterator,
     initialized: bool = false,
 
-    pub fn init(allocator: std.mem.Allocator) !ArgParser {
+    pub fn init(args: std.process.Args, allocator: std.mem.Allocator) !ArgParser {
         std.debug.assert(@intFromPtr(&allocator.vtable) != 0);
 
-        var args = try std.process.argsWithAllocator(allocator);
-        _ = args.skip();
+        var iterator = try args.iterateAllocator(allocator);
+        _ = iterator.skip();
 
         const result = ArgParser{
-            .args = args,
+            .args = iterator,
             .initialized = true,
         };
 
@@ -96,15 +98,15 @@ pub fn matches_flag(arg: []const u8, short: []const u8, long: []const u8) bool {
 }
 
 pub fn random_seed() u64 {
-    var buffer: [8]u8 = undefined;
+    var counter: w32.LARGE_INTEGER = undefined;
 
-    std.posix.getrandom(&buffer) catch {
-        const timestamp: u64 = @intCast(std.time.milliTimestamp());
+    if (w32.QueryPerformanceCounter(&counter) == 0) {
+        const timestamp: u64 = w32.GetTickCount64();
 
         return timestamp;
-    };
+    }
 
-    const result = std.mem.readInt(u64, &buffer, .little);
+    const result: u64 = @bitCast(counter.QuadPart);
 
     std.debug.assert(@sizeOf(@TypeOf(result)) == 8);
 

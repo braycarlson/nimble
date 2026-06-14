@@ -5,9 +5,9 @@ const event = input.event;
 const keycode = input.keycode;
 const modifier = input.modifier;
 
-const Key = event.Key;
-const Mouse = event.Mouse;
-const MouseKind = event.MouseKind;
+const Key = event.key.Key;
+const Mouse = event.mouse.Mouse;
+const MouseKind = event.mouse.Kind;
 
 const testing = std.testing;
 

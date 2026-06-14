@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const Mutex = @import("../mutex.zig").Mutex;
 const slot_mod = @import("slot.zig");
 
 pub const BaseError = error{
@@ -18,7 +19,7 @@ pub fn BaseRegistry(
 
         slot: Slot = Slot.init(),
         paused: if (options.has_paused) bool else void = if (options.has_paused) false else {},
-        mutex: if (options.has_mutex) std.Thread.Mutex else void = if (options.has_mutex) .{} else {},
+        mutex: if (options.has_mutex) Mutex else void = if (options.has_mutex) .{} else {},
 
         pub fn init() Self {
             return Self{};

@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const w32 = @import("win32").everything;
+
 const key_event = @import("../event/key.zig");
 const response_mod = @import("../response.zig");
 const base_mod = @import("../registry/base.zig");
@@ -282,7 +284,7 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
             std.debug.assert(entry.is_active());
 
             if (entry.initial_delay_ms > 0) {
-                std.Thread.sleep(entry.initial_delay_ms * std.time.ns_per_ms);
+                w32.Sleep(entry.initial_delay_ms);
             }
 
             while (!entry.stop_flag.load(.acquire)) {
@@ -294,7 +296,7 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
                     break;
                 }
 
-                std.Thread.sleep(entry.interval_ms * std.time.ns_per_ms);
+                w32.Sleep(entry.interval_ms);
             }
         }
 

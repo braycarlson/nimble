@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const w32 = @import("win32").everything;
+const Mutex = @import("../mutex.zig").Mutex;
 
 const keycode = @import("../keycode.zig");
 const modifier = @import("../modifier.zig");
@@ -405,7 +406,7 @@ pub fn MacroRegistry(comptime capacity: u8) type {
         play_repeat: u32 = 0,
         play_thread: ?std.Thread = null,
 
-        mutex: std.Thread.Mutex = .{},
+        mutex: Mutex = .{},
 
         pub fn init() Self {
             return Self{};
@@ -577,7 +578,7 @@ pub fn MacroRegistry(comptime capacity: u8) type {
                 self.execute_macro(macro);
 
                 if (delay_between > 0 and r < repeats - 1) {
-                    std.Thread.sleep(delay_between * std.time.ns_per_ms);
+                    w32.Sleep(delay_between);
                 }
             }
 
@@ -730,7 +731,7 @@ fn execute_delay(action: *const Action) void {
     std.debug.assert(action.delay_ms <= delay_max_ms);
 
     if (action.delay_ms > 0) {
-        std.Thread.sleep(action.delay_ms * std.time.ns_per_ms);
+        w32.Sleep(action.delay_ms);
     }
 }
 
