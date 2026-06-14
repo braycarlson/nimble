@@ -65,7 +65,9 @@ pub fn build(b: *std.Build) void {
     add_hook(b, target, optimize, win32, input_module, fuzz_module, dst_module, common_module);
     add_stress(b, target, optimize, win32, input_module, fuzz_module, dst_module, common_module);
     add_examples(b, target, optimize, nimble, win32);
-    add_visualizer(b, target, optimize);
+    if (b.option(bool, "visualizer", "Build the native DST visualizer (requires raylib)") orelse false) {
+        add_visualizer(b, target, optimize);
+    }
     add_wasm(b, input_module, common_module);
 }
 
