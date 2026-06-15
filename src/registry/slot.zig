@@ -127,8 +127,6 @@ pub fn SlotManager(comptime Entry: type, comptime capacity: u32) type {
             var i: u32 = 0;
 
             while (i < capacity) : (i += 1) {
-                std.debug.assert(i < capacity);
-
                 if (self.entries[i].is_active() and self.entries[i].get_id() == id) {
                     return i;
                 }
@@ -141,8 +139,6 @@ pub fn SlotManager(comptime Entry: type, comptime capacity: u32) type {
             var i: u32 = 0;
 
             while (i < capacity) : (i += 1) {
-                std.debug.assert(i < capacity);
-
                 if (!self.entries[i].is_active()) {
                     return i;
                 }
@@ -155,8 +151,6 @@ pub fn SlotManager(comptime Entry: type, comptime capacity: u32) type {
             var i: u32 = 0;
 
             while (i < capacity) : (i += 1) {
-                std.debug.assert(i < capacity);
-
                 self.entries[i] = .{};
             }
 

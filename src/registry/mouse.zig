@@ -53,6 +53,8 @@ pub const Entry = struct {
     }
 
     pub fn invoke(self: *const Entry, mouse: *const Mouse) ?Response {
+        std.debug.assert(self.is_active());
+
         return self.base.invoke(.{mouse});
     }
 };

@@ -23,8 +23,6 @@ pub fn Header(comptime magic: *const [4]u8, comptime Extra: type) type {
         extra: Extra,
 
         pub fn is_valid(self: *const Self) bool {
-            std.debug.assert(@intFromPtr(self) != 0);
-
             const valid_magic = std.mem.eql(u8, &self.magic, magic);
             const valid_version = self.version == 1;
             const result = valid_magic and valid_version;
@@ -33,8 +31,6 @@ pub fn Header(comptime magic: *const [4]u8, comptime Extra: type) type {
         }
 
         pub fn validate(self: *const Self) !void {
-            std.debug.assert(@intFromPtr(self) != 0);
-
             if (!std.mem.eql(u8, &self.magic, magic)) {
                 return error.InvalidMagic;
             }
@@ -57,7 +53,6 @@ pub fn Recorder(comptime BufferType: type) type {
         selected_format: Format,
 
         pub fn init(allocator: std.mem.Allocator, fmt: Format) Self {
-            std.debug.assert(@intFromPtr(&allocator.vtable) != 0);
             std.debug.assert(fmt.is_valid());
 
             const result = Self{
@@ -73,8 +68,6 @@ pub fn Recorder(comptime BufferType: type) type {
         }
 
         pub fn is_valid(self: *const Self) bool {
-            std.debug.assert(@intFromPtr(self) != 0);
-
             const result = self.selected_format.is_valid();
 
             return result;
@@ -161,8 +154,6 @@ pub fn Recording(comptime HeaderType: type, comptime EventType: type, comptime E
         extra: ExtraData,
 
         pub fn is_valid(self: *const Self) bool {
-            std.debug.assert(@intFromPtr(self) != 0);
-
             const valid_header = self.header.is_valid();
             const valid_events = @intFromPtr(self.events.ptr) != 0 or self.events.len == 0;
             const result = valid_header and valid_events;
@@ -181,7 +172,6 @@ pub fn Recording(comptime HeaderType: type, comptime EventType: type, comptime E
         }
 
         pub fn load_from_file(allocator: std.mem.Allocator, path: []const u8) !Self {
-            std.debug.assert(@intFromPtr(&allocator.vtable) != 0);
             std.debug.assert(path.len > 0);
 
             const file = try std.fs.cwd().openFile(path, .{});
@@ -200,7 +190,6 @@ pub fn Recording(comptime HeaderType: type, comptime EventType: type, comptime E
         }
 
         pub fn load_from_binary(allocator: std.mem.Allocator, data: []const u8) !Self {
-            std.debug.assert(@intFromPtr(&allocator.vtable) != 0);
             std.debug.assert(data.len > 0);
 
             var stream = std.io.fixedBufferStream(data);
@@ -247,8 +236,6 @@ pub fn Recording(comptime HeaderType: type, comptime EventType: type, comptime E
         }
 
         fn read_event(comptime E: type, bin_reader: anytype) !E {
-            std.debug.assert(@intFromPtr(bin_reader) != 0);
-
             if (@hasDecl(E, "read")) {
                 const result = try E.read(bin_reader);
 
@@ -270,8 +257,6 @@ pub fn Recording(comptime HeaderType: type, comptime EventType: type, comptime E
 
                 if (self.events[i].tick == target_tick) {
                     const result = &self.events[i];
-
-                    std.debug.assert(@intFromPtr(result) != 0);
 
                     return result;
                 }

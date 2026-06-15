@@ -41,7 +41,6 @@ pub const Trace = struct {
     len: u32 = 0,
 
     pub fn push(self: *Trace, op: Operation) void {
-        std.debug.assert(@intFromPtr(self) != 0);
         std.debug.assert(self.len <= trace_capacity);
 
         if (self.len < trace_capacity) {
@@ -53,7 +52,6 @@ pub const Trace = struct {
     }
 
     pub fn slice(self: *const Trace) []const Operation {
-        std.debug.assert(@intFromPtr(self) != 0);
         std.debug.assert(self.len <= trace_capacity);
 
         const result = self.operations[0..self.len];
@@ -64,8 +62,6 @@ pub const Trace = struct {
     }
 
     pub fn clear(self: *Trace) void {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         self.len = 0;
 
         std.debug.assert(self.len == 0);
@@ -97,8 +93,6 @@ pub const Simulator = struct {
     }
 
     pub fn reset(self: *Simulator) void {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         self.keyboard = Keyboard.init();
         self.model = Model.init();
         self.trace.clear();
@@ -109,8 +103,6 @@ pub const Simulator = struct {
     }
 
     pub fn reseed(self: *Simulator, seed: u64) void {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         self.reset();
         self.prng = std.Random.DefaultPrng.init(seed);
         self.seed = seed;
@@ -120,7 +112,6 @@ pub const Simulator = struct {
     }
 
     pub fn run(self: *Simulator, steps: u32) ?Failure {
-        std.debug.assert(@intFromPtr(self) != 0);
         std.debug.assert(steps > 0 or steps == 0);
 
         var random = self.prng.random();
@@ -128,8 +119,6 @@ pub const Simulator = struct {
         var i: u32 = 0;
 
         while (i < steps) : (i += 1) {
-            std.debug.assert(i < steps);
-
             const failure = self.execute_step(&random);
 
             if (failure) |f| {
@@ -143,9 +132,6 @@ pub const Simulator = struct {
     }
 
     fn execute_step(self: *Simulator, random: *std.Random) ?Failure {
-        std.debug.assert(@intFromPtr(self) != 0);
-        std.debug.assert(@intFromPtr(random) != 0);
-
         const op = model_mod.generate_operation(random, &self.model);
 
         self.trace.push(op);
@@ -161,8 +147,6 @@ pub const Simulator = struct {
     }
 
     fn check_invariants(self: *const Simulator, op: Operation) ?Failure {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         if (!self.model.matches(&self.keyboard)) {
             return Failure{
                 .step = self.step,
@@ -191,8 +175,6 @@ pub const Simulator = struct {
     }
 
     pub fn replay(self: *Simulator, operations: []const Operation) ?Failure {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         self.reset();
 
         var i: u32 = 0;

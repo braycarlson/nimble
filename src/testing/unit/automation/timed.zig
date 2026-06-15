@@ -37,7 +37,7 @@ test "Options default" {
     try testing.expectEqual(Mode.toggle, opts.mode);
     try testing.expectEqual(@as(u64, 0), opts.duration_ms);
     try testing.expectEqual(@as(i64, 0), opts.end_time);
-    try testing.expectEqual(@as(u32, 0), opts.max_count);
+    try testing.expectEqual(@as(u32, 0), opts.count_limit);
 }
 
 test "Options.duration" {
@@ -65,7 +65,7 @@ test "Options.count" {
     const opts = Options.count(100);
 
     try testing.expectEqual(Mode.count_limited, opts.mode);
-    try testing.expectEqual(@as(u32, 100), opts.max_count);
+    try testing.expectEqual(@as(u32, 100), opts.count_limit);
 }
 
 test "timed constants" {

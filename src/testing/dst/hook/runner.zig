@@ -28,8 +28,6 @@ pub const RunnerConfig = struct {
     slow_callback_probability: u8 = default_slow_callback_probability,
 
     pub fn is_valid(self: *const RunnerConfig) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_ticks = self.max_ticks > 0;
         const valid_timeout = self.timeout_probability <= 100;
         const valid_slow = self.slow_callback_probability <= 100;
@@ -147,7 +145,6 @@ fn run_simulator(allocator: std.mem.Allocator, config: RunnerConfig) !void {
 }
 
 fn print_callback_statistics(stats: *const simulator.Stats) void {
-    std.debug.assert(@intFromPtr(stats) != 0);
     std.debug.assert(stats.is_valid());
 
     common.print_section("Callback Statistics");
@@ -158,7 +155,6 @@ fn print_callback_statistics(stats: *const simulator.Stats) void {
 }
 
 fn print_hook_statistics(stats: *const simulator.Stats) void {
-    std.debug.assert(@intFromPtr(stats) != 0);
     std.debug.assert(stats.is_valid());
 
     common.print_section("Hook Statistics");
@@ -170,7 +166,6 @@ fn print_hook_statistics(stats: *const simulator.Stats) void {
 }
 
 fn print_system_events(stats: *const simulator.Stats) void {
-    std.debug.assert(@intFromPtr(stats) != 0);
     std.debug.assert(stats.is_valid());
 
     common.print_section("System Events");
@@ -180,7 +175,6 @@ fn print_system_events(stats: *const simulator.Stats) void {
 }
 
 fn print_timing_statistics(stats: *const simulator.Stats) void {
-    std.debug.assert(@intFromPtr(stats) != 0);
     std.debug.assert(stats.is_valid());
 
     common.print_section("Timing");
@@ -190,7 +184,6 @@ fn print_timing_statistics(stats: *const simulator.Stats) void {
 }
 
 fn write_recording(allocator: std.mem.Allocator, sim: *const Simulator, path: []const u8) !void {
-    std.debug.assert(@intFromPtr(sim) != 0);
     std.debug.assert(sim.is_valid());
     std.debug.assert(path.len > 0);
 

@@ -68,7 +68,7 @@ pub const Recorder = struct {
     }
 
     pub fn is_valid(self: *const Recorder) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
+        _ = self;
 
         return true;
     }
@@ -81,7 +81,6 @@ pub const Recorder = struct {
 
     pub fn record(self: *Recorder, sim: *const Simulator) !void {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromPtr(sim) != 0);
         std.debug.assert(sim.is_valid());
 
         self.buffer.clearRetainingCapacity();
@@ -181,8 +180,6 @@ pub const Recording = struct {
     events: []RecordedEvent,
 
     pub fn is_valid(self: *const Recording) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_config = self.config.is_valid();
         const valid_stats = self.stats.is_valid();
         const result = valid_config and valid_stats;
@@ -191,7 +188,6 @@ pub const Recording = struct {
     }
 
     pub fn deinit(self: *Recording) void {
-        std.debug.assert(@intFromPtr(self) != 0);
         std.debug.assert(self.is_valid());
 
         self.allocator.free(self.events);

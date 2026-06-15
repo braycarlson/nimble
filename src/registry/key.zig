@@ -50,6 +50,8 @@ pub const Entry = struct {
     }
 
     pub fn invoke(self: *const Entry, k: *const Key) ?Response {
+        std.debug.assert(self.is_active());
+
         return self.base.invoke(.{k});
     }
 

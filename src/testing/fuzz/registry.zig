@@ -39,8 +39,6 @@ pub const RegistryState = struct {
     }
 
     pub fn is_valid(self: *const RegistryState) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_count = self.count <= registered_capacity;
         const result = valid_count;
 
@@ -89,7 +87,6 @@ pub const RegistryState = struct {
 
     pub fn get_random_index(self: *const RegistryState, random: *std.Random) ?u32 {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromPtr(random) != 0);
 
         if (self.count == 0) {
             return null;
@@ -124,7 +121,6 @@ pub fn fuzz_key_registry(seed: u64, iterations: u32) !void {
     var iteration: u32 = 0;
 
     while (iteration < iterations) : (iteration += 1) {
-        std.debug.assert(iteration < iterations);
         std.debug.assert(state.is_valid());
 
         const operation = random.intRangeLessThan(u8, 0, 100);
@@ -143,8 +139,6 @@ fn execute_registry_operation(
     state: *RegistryState,
     operation: u8,
 ) void {
-    std.debug.assert(@intFromPtr(reg) != 0);
-    std.debug.assert(@intFromPtr(random) != 0);
     std.debug.assert(state.is_valid());
     std.debug.assert(operation < 100);
 
@@ -166,8 +160,6 @@ fn try_register_binding(
     random: *std.Random,
     state: *RegistryState,
 ) void {
-    std.debug.assert(@intFromPtr(reg) != 0);
-    std.debug.assert(@intFromPtr(random) != 0);
     std.debug.assert(state.is_valid());
 
     const key_keycode = input_fuzz.random_non_modifier_key_keycode(random);
@@ -198,8 +190,6 @@ fn try_unregister_binding(
     random: *std.Random,
     state: *RegistryState,
 ) void {
-    std.debug.assert(@intFromPtr(reg) != 0);
-    std.debug.assert(@intFromPtr(random) != 0);
     std.debug.assert(state.is_valid());
 
     const idx = state.get_random_index(random) orelse return;
@@ -218,9 +208,6 @@ fn try_unregister_binding(
 }
 
 fn process_random_key(reg: *KeyRegistry, random: *std.Random) void {
-    std.debug.assert(@intFromPtr(reg) != 0);
-    std.debug.assert(@intFromPtr(random) != 0);
-
     const key_keycode = input_fuzz.random_non_modifier_key_keycode(random);
     const mods = common.random_modifier_set(random);
 
@@ -243,16 +230,12 @@ fn process_random_key(reg: *KeyRegistry, random: *std.Random) void {
 }
 
 fn toggle_pause(reg: *KeyRegistry, random: *std.Random) void {
-    std.debug.assert(@intFromPtr(reg) != 0);
-    std.debug.assert(@intFromPtr(random) != 0);
-
     const paused = common.random_bool(random);
 
     reg.set_paused(paused);
 }
 
 fn clear_registry(reg: *KeyRegistry, state: *RegistryState) void {
-    std.debug.assert(@intFromPtr(reg) != 0);
     std.debug.assert(state.is_valid());
 
     reg.clear();
@@ -275,8 +258,6 @@ pub fn fuzz_binding_matching(seed: u64, iterations: u32) !void {
     var iteration: u32 = 0;
 
     while (iteration < iterations) : (iteration += 1) {
-        std.debug.assert(iteration < iterations);
-
         const key_keycode = input_fuzz.random_non_modifier_key_keycode(&random);
         const mods = common.random_modifier_set_limited(&random, binding_modifier_limit);
         const binding = Binding.init(key_keycode, mods);
@@ -308,7 +289,6 @@ fn apply_binding_to_keyboard(
     key_keycode: u8,
     mods: *const modifier.Set,
 ) void {
-    std.debug.assert(@intFromPtr(keyboard) != 0);
     std.debug.assert(keycode.is_valid(key_keycode));
     std.debug.assert(mods.flags <= modifier.flag_all);
 
@@ -417,8 +397,6 @@ test "RegistryState capacity limit" {
     var i: u32 = 0;
 
     while (i < registered_capacity) : (i += 1) {
-        std.debug.assert(i < registered_capacity);
-
         state.add(i + 1);
     }
 

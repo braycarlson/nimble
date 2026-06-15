@@ -41,7 +41,6 @@ pub const Hook = struct {
 
     pub fn install(kind: Kind, callback: Callback, instance: w32.HINSTANCE) ?Hook {
         std.debug.assert(kind.is_valid());
-        std.debug.assert(@intFromPtr(callback) != 0);
 
         const id = kind.to_id();
         const handle = w32.SetWindowsHookExW(id, @ptrCast(callback), instance, 0);
@@ -64,8 +63,6 @@ pub const Hook = struct {
     }
 
     pub fn is_valid(self: *const Hook) bool {
-        std.debug.assert(@intFromPtr(self.handle) != 0 or @intFromPtr(self.handle) == 0);
-
         const valid_kind = self.kind.is_valid();
 
         return valid_kind;
@@ -73,7 +70,6 @@ pub const Hook = struct {
 
     pub fn remove(self: *const Hook) bool {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromPtr(self.handle) != 0);
 
         const status = w32.UnhookWindowsHookEx(self.handle);
         const result = status != 0;

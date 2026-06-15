@@ -45,7 +45,7 @@ pub fn BindBuilder(comptime HookType: type) type {
                 }
             };
 
-            return self.hook.registry.register(
+            const id = try self.hook.registry.register(
                 self.kind,
                 wrapper.invoke,
                 context,
@@ -53,6 +53,10 @@ pub fn BindBuilder(comptime HookType: type) type {
                     .filter = self.filter,
                 },
             );
+
+            std.debug.assert(id >= 1);
+
+            return id;
         }
     };
 }
@@ -112,7 +116,7 @@ pub fn GroupBindBuilder(comptime HookType: type) type {
                 }
             };
 
-            return self.hook.registry.register(
+            const id = try self.hook.registry.register(
                 self.kind,
                 wrapper.invoke,
                 context,
@@ -120,6 +124,10 @@ pub fn GroupBindBuilder(comptime HookType: type) type {
                     .filter = self.filter,
                 },
             );
+
+            std.debug.assert(id >= 1);
+
+            return id;
         }
     };
 }

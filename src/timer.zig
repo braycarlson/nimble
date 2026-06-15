@@ -161,8 +161,6 @@ pub fn TimerRegistry(comptime capacity: u8) type {
             var i: u32 = 0;
 
             while (i < capacity) : (i += 1) {
-                std.debug.assert(i < capacity);
-
                 const entry = &self.slot.entries[i];
 
                 if (!entry.active or !entry.running) {

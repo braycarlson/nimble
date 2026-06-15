@@ -75,8 +75,6 @@ pub const Operation = struct {
     sequence_len: u8,
 
     pub fn is_valid(self: *const Operation) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_kind = self.kind.is_valid();
         const valid_seq = self.sequence_len <= 8;
         const result = valid_kind and valid_seq;
@@ -92,8 +90,6 @@ pub const ReplayEntry = struct {
     prng_state: u64,
 
     pub fn is_valid(self: *const ReplayEntry) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_op = self.operation.is_valid();
         const valid_fault = self.fault.is_valid();
         const result = valid_op and valid_fault;
@@ -118,8 +114,6 @@ pub const RealisticConfig = struct {
     modifier_first_probability: u8 = 80,
 
     pub fn is_valid(self: *const RealisticConfig) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_keys = self.max_simultaneous_keys <= max_held_keys;
         const valid_mods = self.max_simultaneous_modifiers <= max_held_modifiers;
         const result = valid_keys and valid_mods;
@@ -141,8 +135,6 @@ pub const OperationWeights = struct {
     resume_registry: u8 = 3,
 
     pub fn total(self: *const OperationWeights) u16 {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const result = @as(u16, self.key_down) + self.key_up + self.modifier_down +
             self.modifier_up + self.register_binding + self.unregister_binding +
             self.random_sequence + self.clear_keyboard + self.pause_registry +
@@ -163,8 +155,6 @@ pub const FaultWeights = struct {
     delay_processing: u8 = 10,
 
     pub fn total(self: *const FaultWeights) u16 {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const result = @as(u16, self.none) + self.drop_input + self.duplicate_input +
             self.reorder_input + self.corrupt_state + self.delay_processing;
 
@@ -186,8 +176,6 @@ pub const VOPRConfig = struct {
     fault_weights: FaultWeights = .{},
 
     pub fn is_valid(self: *const VOPRConfig) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_ticks = self.max_ticks > 0 and self.max_ticks <= iteration_max;
         const valid_bindings = self.max_bindings <= max_tracked_bindings;
         const valid_interval = self.snapshot_interval > 0;
@@ -213,8 +201,6 @@ pub const PendingInput = struct {
     delay: u64,
 
     pub fn is_valid(self: *const PendingInput) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_keycode = keycode.is_valid(self.keycode);
         const result = valid_keycode;
 
@@ -239,8 +225,6 @@ pub const FaultInjector = struct {
     weights: FaultWeights = .{},
 
     pub fn is_valid(self: *const FaultInjector) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_probability = self.probability <= 100;
         const result = valid_probability;
 
@@ -249,7 +233,6 @@ pub const FaultInjector = struct {
 
     pub fn should_inject(self: *const FaultInjector, random: *std.Random) bool {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromPtr(random) != 0);
 
         if (!self.enabled) {
             return false;
@@ -263,7 +246,6 @@ pub const FaultInjector = struct {
 
     pub fn select_fault(self: *const FaultInjector, random: *std.Random) FaultKind {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromPtr(random) != 0);
 
         const total = self.weights.total();
 
@@ -342,8 +324,6 @@ pub const VOPR = struct {
     }
 
     pub fn is_valid(self: *const VOPR) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_config = self.config.is_valid();
         const valid_keyboard = self.keyboard.is_valid();
         const valid_held = self.held_keys_count <= max_held_keys;
@@ -513,7 +493,6 @@ pub const VOPR = struct {
 
     fn build_operation_for_kind(self: *VOPR, kind: OperationKind, random: *std.Random) Operation {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromPtr(random) != 0);
 
         return switch (kind) {
             .key_down => self.build_key_down_op(random),
@@ -624,7 +603,6 @@ pub const VOPR = struct {
 
     fn select_operation_kind(self: *VOPR, random: *std.Random) OperationKind {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromPtr(random) != 0);
 
         const weights = self.config.operation_weights;
         const total = weights.total();
@@ -1024,9 +1002,6 @@ pub const VOPR = struct {
 
     fn vopr_callback(ctx: *anyopaque, _: *const Key) Response {
         const context: *CallbackContext = @ptrCast(@alignCast(ctx));
-
-        std.debug.assert(@intFromPtr(context) != 0);
-        std.debug.assert(@intFromPtr(context.vopr) != 0);
 
         context.triggered_count += 1;
 

@@ -39,10 +39,10 @@ pub const Entry = struct {
     base: entry_mod.BindingEntry(Callback) = .{},
     duration_ms: u64 = 0,
     end_time: i64 = 0,
-    max_count: u32 = 0,
+    count_limit: u32 = 0,
     mode: Mode = .duration,
     expired: bool = false,
-    current_count: u32 = 0,
+    count_current: u32 = 0,
     start_time: i64 = 0,
 
     pub fn get_id(self: *const Entry) u32 {
@@ -74,6 +74,9 @@ pub const Entry = struct {
     }
 
     pub fn invoke(self: *const Entry, key: *const Key) ?Response {
+        std.debug.assert(self.is_active());
+        std.debug.assert(key.is_valid());
+
         return self.base.invoke(.{key});
     }
 
@@ -84,7 +87,7 @@ pub const Entry = struct {
 
         const valid_base = self.base.is_valid();
         const valid_mode = self.mode.is_valid();
-        const valid_count = self.current_count <= count_max;
+        const valid_count = self.count_current <= count_max;
 
         return valid_base and valid_mode and valid_count;
     }
@@ -115,7 +118,7 @@ pub const Entry = struct {
                 return true;
             },
             .count_limited => {
-                return self.current_count < self.max_count;
+                return self.count_current < self.count_limit;
             },
         }
     }
@@ -125,7 +128,7 @@ pub const Options = struct {
     mode: Mode = .toggle,
     duration_ms: u64 = 0,
     end_time: i64 = 0,
-    max_count: u32 = 0,
+    count_limit: u32 = 0,
 
     pub fn duration(ms: u64) Options {
         return .{
@@ -150,7 +153,7 @@ pub const Options = struct {
     pub fn count(max: u32) Options {
         return .{
             .mode = .count_limited,
-            .max_count = max,
+            .count_limit = max,
         };
     }
 };
@@ -193,7 +196,7 @@ pub fn TimedRegistry(comptime capacity: u32) type {
                 return Error.InvalidValue;
             }
 
-            if (options.mode == .count_limited and options.max_count == 0) {
+            if (options.mode == .count_limited and options.count_limit == 0) {
                 return Error.InvalidValue;
             }
 
@@ -218,10 +221,10 @@ pub fn TimedRegistry(comptime capacity: u32) type {
                 .mode = options.mode,
                 .duration_ms = options.duration_ms,
                 .end_time = options.end_time,
-                .max_count = options.max_count,
+                .count_limit = options.count_limit,
                 .expired = false,
                 .start_time = if (options.mode == .until_time) @intCast(w32.GetTickCount64()) else 0,
-                .current_count = 0,
+                .count_current = 0,
             };
 
             std.debug.assert(self.base.slot.entries[allocation.slot].is_valid());
@@ -257,9 +260,9 @@ pub fn TimedRegistry(comptime capacity: u32) type {
                 }
 
                 if (e.mode == .count_limited) {
-                    e.current_count += 1;
+                    e.count_current += 1;
 
-                    if (e.current_count >= e.max_count) {
+                    if (e.count_current >= e.count_limit) {
                         e.expired = true;
                     }
                 }
@@ -289,7 +292,7 @@ pub fn TimedRegistry(comptime capacity: u32) type {
 
             entry.set_enabled(true);
             entry.expired = false;
-            entry.current_count = 0;
+            entry.count_current = 0;
         }
 
         pub fn stop(self: *Self, id: u32) Error!void {
@@ -320,7 +323,7 @@ pub fn TimedRegistry(comptime capacity: u32) type {
 
                 entry.set_enabled(true);
                 entry.expired = false;
-                entry.current_count = 0;
+                entry.count_current = 0;
             }
         }
 
@@ -354,11 +357,11 @@ pub fn TimedRegistry(comptime capacity: u32) type {
                 return null;
             }
 
-            if (entry.current_count >= entry.max_count) {
+            if (entry.count_current >= entry.count_limit) {
                 return 0;
             }
 
-            return entry.max_count - entry.current_count;
+            return entry.count_limit - entry.count_current;
         }
 
         pub fn clear(self: *Self) void {

@@ -24,14 +24,10 @@ pub fn BinaryWriter(comptime Writer: type) type {
         pub fn init(writer: Writer) Self {
             const result = Self{ .writer = writer };
 
-            std.debug.assert(@intFromPtr(&result.writer) != 0);
-
             return result;
         }
 
         pub fn is_valid(self: *const Self) bool {
-            std.debug.assert(@intFromPtr(self) != 0);
-
             const result = @intFromPtr(&self.writer) != 0;
 
             return result;
@@ -53,7 +49,6 @@ pub fn BinaryWriter(comptime Writer: type) type {
 
         pub fn write_byte(self: *Self, value: u8) !void {
             std.debug.assert(self.is_valid());
-            std.debug.assert(value <= 255);
 
             try self.writer.writeByte(value);
         }
@@ -76,14 +71,10 @@ pub fn BinaryReader(comptime Reader: type) type {
         pub fn init(reader: Reader) Self {
             const result = Self{ .reader = reader };
 
-            std.debug.assert(@intFromPtr(&result.reader) != 0);
-
             return result;
         }
 
         pub fn is_valid(self: *const Self) bool {
-            std.debug.assert(@intFromPtr(self) != 0);
-
             const result = @intFromPtr(&self.reader) != 0;
 
             return result;
@@ -111,8 +102,6 @@ pub fn BinaryReader(comptime Reader: type) type {
             std.debug.assert(self.is_valid());
 
             const result = try self.reader.readByte();
-
-            std.debug.assert(result <= 255);
 
             return result;
         }

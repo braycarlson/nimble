@@ -22,8 +22,7 @@ pub const Response = enum(u8) {
     pub fn is_valid(self: Response) bool {
         const value = @intFromEnum(self);
 
-        std.debug.assert(value <= 255);
-        std.debug.assert(variant_count == 3);
+        comptime std.debug.assert(variant_count == 3);
 
         const result = value <= value_max;
 

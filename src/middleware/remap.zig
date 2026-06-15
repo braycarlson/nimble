@@ -80,8 +80,6 @@ pub fn RemapMiddleware(comptime capacity: u32) type {
             var i: u32 = 0;
 
             while (i < capacity) : (i += 1) {
-                std.debug.assert(i < capacity);
-
                 if (self.mappings[i]) |mapping| {
                     if (self.matches(key, &mapping)) {
                         var remapped = key.*;
@@ -117,8 +115,6 @@ pub fn RemapMiddleware(comptime capacity: u32) type {
             var i: u32 = 0;
 
             while (i < capacity) : (i += 1) {
-                std.debug.assert(i < capacity);
-
                 if (self.mappings[i] == null) {
                     return i;
                 }
@@ -135,8 +131,6 @@ pub fn RemapMiddleware(comptime capacity: u32) type {
             var i: u32 = 0;
 
             while (i < capacity) : (i += 1) {
-                std.debug.assert(i < capacity);
-
                 self.mappings[i] = null;
             }
 

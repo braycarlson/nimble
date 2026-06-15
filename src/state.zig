@@ -143,8 +143,6 @@ pub const Keyboard = struct {
         var iteration: u8 = 0;
 
         while (iteration < active_count_max) : (iteration += 1) {
-            std.debug.assert(iteration < active_count_max);
-
             if (index >= self.active_count) {
                 break;
             }

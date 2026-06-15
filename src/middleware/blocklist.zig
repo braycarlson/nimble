@@ -86,8 +86,6 @@ pub fn BlockListMiddleware(comptime capacity: u32) type {
             var i: u32 = 0;
 
             while (i < capacity) : (i += 1) {
-                std.debug.assert(i < capacity);
-
                 if (self.blocked[i]) |binding| {
                     if (key.value == binding.key) {
                         return .consume;
@@ -106,8 +104,6 @@ pub fn BlockListMiddleware(comptime capacity: u32) type {
             var i: u32 = 0;
 
             while (i < capacity) : (i += 1) {
-                std.debug.assert(i < capacity);
-
                 if (self.blocked[i] == null) {
                     return i;
                 }
@@ -136,8 +132,6 @@ pub fn BlockListMiddleware(comptime capacity: u32) type {
             var i: u32 = 0;
 
             while (i < capacity) : (i += 1) {
-                std.debug.assert(i < capacity);
-
                 self.blocked[i] = null;
             }
 

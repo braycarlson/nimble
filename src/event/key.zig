@@ -110,17 +110,7 @@ pub const Key = struct {
     }
 
     pub fn from_lparam(lparam: w32.LPARAM) ?*w32.KBDLLHOOKSTRUCT {
-        std.debug.assert(@sizeOf(w32.LPARAM) == @sizeOf(u64) or @sizeOf(w32.LPARAM) == @sizeOf(u32));
-
-        if (lparam == 0) {
-            return null;
-        }
-
-        const address: u64 = @intCast(lparam);
-
-        std.debug.assert(address != 0);
-
-        return @ptrFromInt(address);
+        return extract(lparam);
     }
 
     fn is_keycode_valid(data: *w32.KBDLLHOOKSTRUCT) bool {

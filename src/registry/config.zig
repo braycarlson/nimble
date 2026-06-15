@@ -57,7 +57,7 @@ pub const ToggleConfig = struct {
 };
 
 pub const MacroConfig = struct {
-    const MaxSteps = 64;
+    const steps_max = 64;
 
     const StepKind = enum { text, line, key, delay };
 
@@ -70,7 +70,7 @@ pub const MacroConfig = struct {
     };
 
     name: []const u8,
-    steps: [MaxSteps]Step = undefined,
+    steps: [steps_max]Step = undefined,
     step_count: u32 = 0,
 
     pub fn init(name: []const u8) MacroConfig {
@@ -80,7 +80,7 @@ pub const MacroConfig = struct {
     pub fn text(self: MacroConfig, txt: []const u8) MacroConfig {
         var result = self;
 
-        if (result.step_count < MaxSteps) {
+        if (result.step_count < steps_max) {
             result.steps[result.step_count] = .{
                 .kind = .text,
                 .text = txt,
@@ -95,7 +95,7 @@ pub const MacroConfig = struct {
     pub fn line(self: MacroConfig, txt: []const u8) MacroConfig {
         var result = self;
 
-        if (result.step_count < MaxSteps) {
+        if (result.step_count < steps_max) {
             result.steps[result.step_count] = .{
                 .kind = .line,
                 .text = txt,
@@ -111,7 +111,7 @@ pub const MacroConfig = struct {
         const parsed = comptime pattern_mod.parse(pattern);
         var result = self;
 
-        if (result.step_count < MaxSteps) {
+        if (result.step_count < steps_max) {
             result.steps[result.step_count] = .{
                 .kind = .key,
                 .key_code = parsed.key,
@@ -127,7 +127,7 @@ pub const MacroConfig = struct {
     pub fn delay(self: MacroConfig, ms: u32) MacroConfig {
         var result = self;
 
-        if (result.step_count < MaxSteps) {
+        if (result.step_count < steps_max) {
             result.steps[result.step_count] = .{
                 .kind = .delay,
                 .delay_ms = ms,

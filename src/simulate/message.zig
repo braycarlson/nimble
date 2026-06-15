@@ -16,6 +16,8 @@ const lparam_previous_state: u5 = 30;
 const lparam_transition_state: u5 = 31;
 
 pub fn make_lparam(scan_keycode: u32, extended: bool, key_up: bool) w32.LPARAM {
+    std.debug.assert(scan_keycode <= lparam_scan_keycode_mask);
+
     var lparam: u32 = lparam_repeat_count;
 
     lparam |= (scan_keycode & lparam_scan_keycode_mask) << lparam_scan_keycode_shift;
@@ -33,6 +35,9 @@ pub fn make_lparam(scan_keycode: u32, extended: bool, key_up: bool) w32.LPARAM {
 }
 
 pub fn is_extended_key(vk: u8) bool {
+    std.debug.assert(vk >= keycode.value_min);
+    std.debug.assert(vk <= keycode.value_max);
+
     return switch (vk) {
         keycode.insert, keycode.delete, keycode.home, keycode.end => true,
         keycode.prior, keycode.next => true,
@@ -44,6 +49,9 @@ pub fn is_extended_key(vk: u8) bool {
 }
 
 pub fn is_key_down(vk: u8) bool {
+    std.debug.assert(vk >= keycode.value_min);
+    std.debug.assert(vk <= keycode.value_max);
+
     return w32.GetAsyncKeyState(@intCast(vk)) < 0;
 }
 
@@ -76,7 +84,7 @@ pub fn send_char(hwnd: w32.HWND, char: u16) void {
     _ = w32.SendMessageW(hwnd, WM_CHAR, char, 0);
 }
 
-pub fn post_key(hwnd: w32.HWND, vk: u8, down: bool) void {
+pub fn post_key(hwnd: w32.HWND, vk: u8, down: bool) bool {
     std.debug.assert(vk >= keycode.value_min);
     std.debug.assert(vk <= keycode.value_max);
 
@@ -85,24 +93,26 @@ pub fn post_key(hwnd: w32.HWND, vk: u8, down: bool) void {
     const msg: u32 = if (down) WM_KEYDOWN else WM_KEYUP;
     const lparam = make_lparam(scan_keycode, extended, !down);
 
-    _ = w32.PostMessageW(hwnd, msg, vk, lparam);
+    return w32.PostMessageW(hwnd, msg, vk, lparam) != 0;
 }
 
-pub fn post_key_down(hwnd: w32.HWND, vk: u8) void {
-    post_key(hwnd, vk, true);
+pub fn post_key_down(hwnd: w32.HWND, vk: u8) bool {
+    return post_key(hwnd, vk, true);
 }
 
-pub fn post_key_up(hwnd: w32.HWND, vk: u8) void {
-    post_key(hwnd, vk, false);
+pub fn post_key_up(hwnd: w32.HWND, vk: u8) bool {
+    return post_key(hwnd, vk, false);
 }
 
-pub fn post_key_press(hwnd: w32.HWND, vk: u8) void {
-    post_key(hwnd, vk, true);
-    post_key(hwnd, vk, false);
+pub fn post_key_press(hwnd: w32.HWND, vk: u8) bool {
+    const down_sent = post_key(hwnd, vk, true);
+    const up_sent = post_key(hwnd, vk, false);
+
+    return down_sent and up_sent;
 }
 
-pub fn post_char(hwnd: w32.HWND, char: u8) void {
-    _ = w32.PostMessageW(hwnd, WM_CHAR, char, 1);
+pub fn post_char(hwnd: w32.HWND, char: u8) bool {
+    return w32.PostMessageW(hwnd, WM_CHAR, char, 1) != 0;
 }
 
 pub fn release_modifiers(hwnd: w32.HWND) void {

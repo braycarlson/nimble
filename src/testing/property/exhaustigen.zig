@@ -15,8 +15,6 @@ pub const Gen = struct {
         bound: u32 = 0,
 
         pub fn is_valid(self: *const Entry) bool {
-            std.debug.assert(@intFromPtr(self) != 0);
-
             const valid_range = self.value <= self.bound or self.bound == 0;
             const result = valid_range;
 
@@ -24,8 +22,6 @@ pub const Gen = struct {
         }
 
         pub fn reset(self: *Entry) void {
-            std.debug.assert(@intFromPtr(self) != 0);
-
             self.value = 0;
             self.bound = 0;
 
@@ -47,7 +43,6 @@ pub const Gen = struct {
     }
 
     pub fn is_valid(self: *const Gen) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
         std.debug.assert(capacity == 32);
 
         const valid_p = self.p <= capacity;
@@ -84,8 +79,6 @@ pub const Gen = struct {
         var iteration: u8 = 0;
 
         while (iteration < capacity) : (iteration += 1) {
-            std.debug.assert(iteration < capacity);
-
             if (i == 0) {
                 std.debug.assert(iteration <= capacity);
 
@@ -380,8 +373,6 @@ test "Gen range_inclusive bounds" {
     var i: u8 = 0;
 
     while (i < count) : (i += 1) {
-        std.debug.assert(i < count);
-
         try testing.expect(values[i] >= 5);
         try testing.expect(values[i] <= 10);
     }
@@ -438,8 +429,6 @@ test "Gen select" {
         var i: u8 = 0;
 
         while (i < items.len) : (i += 1) {
-            std.debug.assert(i < items.len);
-
             if (items[i] == value) {
                 seen[i] = true;
             }

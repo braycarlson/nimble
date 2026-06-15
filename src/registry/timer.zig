@@ -115,6 +115,7 @@ pub fn TimerRegistry(comptime capacity: u32) type {
         fn tick_static() void {
             if (global_instance) |ptr| {
                 const self: *Self = @ptrCast(@alignCast(ptr));
+
                 self.tick();
             }
         }
@@ -330,6 +331,8 @@ pub fn TimerRegistry(comptime capacity: u32) type {
                     }
                 }
             }
+
+            std.debug.assert(pending_count <= capacity_max);
 
             for (pending[0..pending_count]) |p| {
                 if (p.context) |ctx| {

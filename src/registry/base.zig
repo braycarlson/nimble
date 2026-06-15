@@ -38,10 +38,8 @@ pub fn BaseRegistry(
         }
 
         pub fn set_paused(self: *Self, value: bool) void {
-            if (options.has_mutex) {
-                self.mutex.lock();
-                defer self.mutex.unlock();
-            }
+            if (options.has_mutex) self.mutex.lock();
+            defer if (options.has_mutex) self.mutex.unlock();
 
             if (options.has_paused) {
                 self.paused = value;
@@ -56,10 +54,8 @@ pub fn BaseRegistry(
         }
 
         pub fn allocate(self: *Self) BaseError!struct { slot: u32, id: u32 } {
-            if (options.has_mutex) {
-                self.mutex.lock();
-                defer self.mutex.unlock();
-            }
+            if (options.has_mutex) self.mutex.lock();
+            defer if (options.has_mutex) self.mutex.unlock();
 
             const allocation = self.slot.allocate() orelse return error.RegistryFull;
 
@@ -81,10 +77,8 @@ pub fn BaseRegistry(
         pub fn free_by_id(self: *Self, id: u32) BaseError!u32 {
             std.debug.assert(id >= 1);
 
-            if (options.has_mutex) {
-                self.mutex.lock();
-                defer self.mutex.unlock();
-            }
+            if (options.has_mutex) self.mutex.lock();
+            defer if (options.has_mutex) self.mutex.unlock();
 
             return self.slot.free_by_id(id) orelse return error.NotFound;
         }
@@ -109,22 +103,26 @@ pub fn BaseRegistry(
         }
 
         pub fn get_by_id(self: *Self, id: u32) ?*Entry {
+            std.debug.assert(id >= 1);
+
             return self.slot.get_by_id(id);
         }
 
         pub fn get(self: *Self, slot: u32) ?*Entry {
+            std.debug.assert(slot < capacity);
+
             return self.slot.get(slot);
         }
 
         pub fn find_by_id(self: *const Self, id: u32) ?u32 {
+            std.debug.assert(id >= 1);
+
             return self.slot.find_by_id(id);
         }
 
         pub fn clear(self: *Self) void {
-            if (options.has_mutex) {
-                self.mutex.lock();
-                defer self.mutex.unlock();
-            }
+            if (options.has_mutex) self.mutex.lock();
+            defer if (options.has_mutex) self.mutex.unlock();
 
             self.slot.clear();
         }
@@ -146,10 +144,14 @@ pub fn BaseRegistry(
         }
 
         pub fn iterator(self: *Self) Slot.Iterator {
+            std.debug.assert(self.slot.count <= capacity);
+
             return self.slot.iterator();
         }
 
         pub fn entries(self: *Self) *[capacity]Entry {
+            std.debug.assert(self.slot.count <= capacity);
+
             return &self.slot.entries;
         }
     };

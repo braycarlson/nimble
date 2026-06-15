@@ -258,6 +258,8 @@ pub const List = struct {
     }
 
     pub fn get(self: *const List, index: u8) ?*const Monitor {
+        std.debug.assert(self.count <= max);
+
         if (index >= self.count) {
             return null;
         }
@@ -280,6 +282,8 @@ pub const List = struct {
     }
 
     pub fn get_at_position(self: *const List, x: i32, y: i32) ?*const Monitor {
+        std.debug.assert(self.count <= max);
+
         var i: u8 = 0;
 
         while (i < self.count) : (i += 1) {

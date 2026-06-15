@@ -238,11 +238,23 @@ fn add_visualizer(
         return;
     }
 
+    const translate = b.addTranslateC(.{
+        .root_source_file = raylib_dep.?.path("src/raylib.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    translate.addIncludePath(raylib_dep.?.path("src"));
+
+    const raylib_c = translate.createModule();
+
     const module = b.createModule(.{
         .root_source_file = b.path("src/testing/dst/visualizer/main.zig"),
         .target = target,
         .optimize = optimize,
     });
+
+    module.addImport("raylib_c", raylib_c);
 
     const exe = b.addExecutable(.{ .name = "visualizer", .root_module = module });
     module.linkLibrary(raylib_dep.?.artifact("raylib"));

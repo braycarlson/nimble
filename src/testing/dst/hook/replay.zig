@@ -26,8 +26,6 @@ pub const ReplayState = struct {
     reinstalls_so_far: u64 = 0,
 
     pub fn is_valid(self: *const ReplayState) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_state = self.hook_state.is_valid();
         const valid_health = self.health.is_valid();
         const result = valid_state and valid_health;
@@ -62,8 +60,6 @@ pub const Replayer = struct {
     }
 
     pub fn is_valid(self: *const Replayer) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_state = self.state.is_valid();
         const valid_tick = self.current_tick <= tick_max;
         const result = valid_state and valid_tick;
@@ -81,7 +77,6 @@ pub const Replayer = struct {
 
     pub fn load_recording(self: *Replayer, recording: *const Recording) void {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromPtr(recording) != 0);
         std.debug.assert(recording.is_valid());
 
         self.recording = recording;
@@ -93,7 +88,6 @@ pub const Replayer = struct {
 
     pub fn set_callback(self: *Replayer, callback: ReplayCallback, context: ?*anyopaque) void {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromPtr(callback) != 0);
 
         self.callback = callback;
         self.callback_context = context;
@@ -204,7 +198,6 @@ pub const Replayer = struct {
 
     fn apply_event(self: *Replayer, event: *const RecordedEvent) void {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromPtr(event) != 0);
         std.debug.assert(event.is_valid());
 
         switch (event.event) {

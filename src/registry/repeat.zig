@@ -257,7 +257,12 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
             entry.count.store(0, .release);
             entry.stop_flag.store(false, .release);
 
-            entry.thread = std.Thread.spawn(.{}, repeat_thread, .{ entry, slot }) catch null;
+            entry.thread = std.Thread.spawn(.{}, repeat_thread, .{ entry, slot }) catch {
+                entry.running.store(false, .release);
+                entry.thread = null;
+
+                return;
+            };
         }
 
         fn stop_entry(self: *Self, entry: *Entry) ?std.Thread {
@@ -288,9 +293,9 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
             }
 
             while (!entry.stop_flag.load(.acquire)) {
-                const current_count = entry.count.fetchAdd(1, .acq_rel);
+                const count_current = entry.count.fetchAdd(1, .acq_rel);
 
-                entry.invoke(current_count);
+                entry.invoke(count_current);
 
                 if (entry.stop_flag.load(.acquire)) {
                     break;

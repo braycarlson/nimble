@@ -91,8 +91,6 @@ fn append_modifiers_down(
     var i: u8 = 0;
 
     while (i < modifier.kind_count) : (i += 1) {
-        std.debug.assert(i < modifier.kind_count);
-
         if (array[i]) |kind| {
             std.debug.assert(length < capacity_input);
 
@@ -257,7 +255,6 @@ pub fn release_modifiers(modifiers: *const modifier.Set) bool {
     var i: u8 = 0;
 
     while (i < modifier.kind_count) : (i += 1) {
-        std.debug.assert(i < modifier.kind_count);
         std.debug.assert(length <= i);
 
         if (array[i]) |kind| {

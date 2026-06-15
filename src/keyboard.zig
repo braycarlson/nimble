@@ -143,7 +143,12 @@ pub fn KeyboardHook(comptime config: Config) type {
                 return error.HookInstallFailed;
             }
 
+            std.debug.assert(self.hook_handle != null);
+            std.debug.assert(self.module_handle != null);
+
             self.running.store(true, .seq_cst);
+
+            std.debug.assert(self.running.load(.seq_cst));
         }
 
         pub fn stop(self: *Self) void {
@@ -164,6 +169,8 @@ pub fn KeyboardHook(comptime config: Config) type {
 
             instance = null;
             self.blocked.store(false, .seq_cst);
+
+            std.debug.assert(self.hook_handle == null);
         }
 
         pub fn is_running(self: *Self) bool {
@@ -237,19 +244,31 @@ pub fn KeyboardHook(comptime config: Config) type {
         }
 
         pub fn press(_: *Self, value: u8) bool {
+            std.debug.assert(value >= keycode.value_min);
+            std.debug.assert(value <= keycode.value_max);
+
             return simulate_key.press(value);
         }
 
         pub fn key_down(_: *Self, value: u8) bool {
+            std.debug.assert(value >= keycode.value_min);
+            std.debug.assert(value <= keycode.value_max);
+
             return simulate_key.key_down(value);
         }
 
         pub fn key_up(_: *Self, value: u8) bool {
+            std.debug.assert(value >= keycode.value_min);
+            std.debug.assert(value <= keycode.value_max);
+
             return simulate_key.key_up(value);
         }
 
         pub fn send_chord(_: *Self, value: u8, modifiers: modifier.Set) bool {
-            return simulate_key.send_chord(value, modifiers);
+            std.debug.assert(value >= keycode.value_min);
+            std.debug.assert(value <= keycode.value_max);
+
+            return simulate_key.combination(&modifiers, value);
         }
 
         pub fn typer(_: *Self) simulate_text.Typer {
@@ -273,6 +292,8 @@ pub fn KeyboardHook(comptime config: Config) type {
                 return primitive.next(code, wparam, lparam);
             }
 
+            std.debug.assert(code >= 0);
+
             const self = instance orelse return primitive.next(code, wparam, lparam);
 
             const parsed = Key.parse(wparam, lparam) orelse {
@@ -282,6 +303,8 @@ pub fn KeyboardHook(comptime config: Config) type {
             if (config.pass_injected and parsed.injected) {
                 return primitive.next(code, wparam, lparam);
             }
+
+            std.debug.assert(parsed.is_valid());
 
             self.keyboard.sync();
 

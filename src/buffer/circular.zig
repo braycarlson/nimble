@@ -164,8 +164,6 @@ pub fn CircularBuffer(comptime capacity: u32) type {
             var iteration: u32 = 0;
 
             while (iteration < capacity) : (iteration += 1) {
-                std.debug.assert(iteration < capacity);
-
                 if (index == 0) {
                     break;
                 }

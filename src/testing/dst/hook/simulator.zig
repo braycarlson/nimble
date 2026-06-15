@@ -96,8 +96,6 @@ pub const RecordedEvent = struct {
     health: Health,
 
     pub fn is_valid(self: *const RecordedEvent) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_event = self.event.is_valid();
         const valid_state = self.hook_state.is_valid();
         const valid_health = self.health.is_valid();
@@ -118,8 +116,6 @@ pub const Config = struct {
     sleep_probability: u8 = 1,
 
     pub fn is_valid(self: *const Config) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_timeout = self.timeout_probability <= probability_max;
         const valid_slow = self.slow_callback_probability <= probability_max;
         const valid_desktop = self.desktop_switch_probability <= probability_max;
@@ -150,8 +146,6 @@ pub const Stats = struct {
     max_consecutive_slow: u64 = 0,
 
     pub fn is_valid(self: *const Stats) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_callbacks = self.callbacks_under_threshold + self.callbacks_over_threshold <= self.total_callbacks;
         const valid_reinstalls = self.reinstall_successes + self.reinstall_failures <= self.reinstall_attempts;
         const result = valid_callbacks and valid_reinstalls;
@@ -195,8 +189,6 @@ pub const HealthMonitor = struct {
     }
 
     pub fn is_valid(self: *const HealthMonitor) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_samples = self.slow_samples <= self.total_samples;
         const result = valid_samples;
 
@@ -298,8 +290,6 @@ pub const Simulator = struct {
     }
 
     pub fn is_valid(self: *const Simulator) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_config = self.config.is_valid();
         const valid_state = self.hook_state.is_valid();
         const valid_health = self.health.is_valid();
@@ -394,7 +384,6 @@ pub const Simulator = struct {
 
     fn check_system_events(self: *Simulator, random: *std.Random) void {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromPtr(random) != 0);
 
         self.check_session_lock(random);
         self.check_uac(random);
@@ -405,7 +394,6 @@ pub const Simulator = struct {
 
     fn check_session_lock(self: *Simulator, random: *std.Random) void {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromPtr(random) != 0);
 
         const roll = random.intRangeLessThan(u8, 0, probability_max);
 
@@ -431,7 +419,6 @@ pub const Simulator = struct {
 
     fn check_uac(self: *Simulator, random: *std.Random) void {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromPtr(random) != 0);
 
         if (self.session_locked) {
             return;
@@ -463,7 +450,6 @@ pub const Simulator = struct {
 
     fn check_desktop_switch(self: *Simulator, random: *std.Random) void {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromPtr(random) != 0);
 
         const roll = random.intRangeLessThan(u8, 0, probability_max);
 
@@ -479,7 +465,6 @@ pub const Simulator = struct {
 
     fn simulate_callback(self: *Simulator, random: *std.Random) void {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromPtr(random) != 0);
 
         var callback_ns: u64 = random.intRangeAtMost(u64, callback_min_ns, callback_max_ns);
 
@@ -519,7 +504,6 @@ pub const Simulator = struct {
 
     fn attempt_reinstall(self: *Simulator, random: *std.Random) void {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromPtr(random) != 0);
 
         self.stats.reinstall_attempts += 1;
         self.hook_state = .reinstalling;
@@ -610,8 +594,6 @@ test "HealthMonitor degraded" {
     var i: u8 = 0;
 
     while (i < 5) : (i += 1) {
-        std.debug.assert(i < 5);
-
         monitor.record_callback(warning_threshold_ns + 1000);
     }
 

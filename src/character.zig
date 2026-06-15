@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const keycode = @import("keycode.zig");
 const key_event = @import("event/key.zig");
 
@@ -8,6 +10,8 @@ pub fn is_whitespace(c: u8) bool {
 }
 
 pub fn from_keycode(value: u8) u8 {
+    std.debug.assert(keycode.is_valid(value));
+
     if (value >= 'A' and value <= 'Z') {
         return value + 32;
     }
@@ -35,6 +39,8 @@ pub fn from_keycode(value: u8) u8 {
 }
 
 pub fn from_key(key: *const Key) ?u8 {
+    std.debug.assert(key.is_valid());
+
     const value = key.value;
 
     if (value >= 'A' and value <= 'Z') {

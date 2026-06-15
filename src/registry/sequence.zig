@@ -46,6 +46,8 @@ pub const Entry = struct {
     }
 
     pub fn invoke(self: *const Entry) void {
+        std.debug.assert(self.is_active());
+
         if (self.base.get_callback()) |cb| {
             if (self.base.get_context()) |ctx| {
                 cb(ctx);
@@ -135,6 +137,8 @@ pub fn SequenceRegistry(comptime capacity: u32) type {
             context: ?*anyopaque,
             options: Options,
         ) Error!u32 {
+            std.debug.assert(self.is_valid());
+
             if (pattern.len == 0) {
                 return error.SequenceEmpty;
             }
@@ -147,6 +151,9 @@ pub fn SequenceRegistry(comptime capacity: u32) type {
             defer self.base.unlock();
 
             const allocation = self.base.allocate_locked() catch return error.RegistryFull;
+
+            std.debug.assert(allocation.slot < capacity);
+            std.debug.assert(allocation.id >= 1);
 
             var entry = Entry{
                 .base = .{

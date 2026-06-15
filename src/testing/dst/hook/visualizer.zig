@@ -57,8 +57,6 @@ const Event = struct {
     data: u32,
 
     pub fn is_valid(self: *const Event) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_kind = self.kind.is_valid();
         const result = valid_kind;
 
@@ -233,7 +231,6 @@ fn reset_current_state() void {
 }
 
 fn apply_event_to_state(event: *const Event) void {
-    std.debug.assert(@intFromPtr(event) != 0);
     std.debug.assert(event.is_valid());
 
     switch (event.kind) {

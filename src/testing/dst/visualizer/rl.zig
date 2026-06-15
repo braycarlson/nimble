@@ -1,4 +1,4 @@
-pub const c = @cImport(@cInclude("raylib.h"));
+pub const c = @import("raylib_c");
 
 pub const Color = c.Color;
 pub const Font = c.Font;

@@ -95,8 +95,6 @@ pub const Config = struct {
     }
 
     pub fn parse(process_args: std.process.Args, allocator: std.mem.Allocator) Config {
-        std.debug.assert(@intFromPtr(&allocator) != 0);
-
         var args = process_args.iterateAllocator(allocator) catch {
             return default_config();
         };
@@ -134,8 +132,6 @@ pub const Config = struct {
 };
 
 fn parse_arguments(args: anytype, config: *Config) void {
-    std.debug.assert(@intFromPtr(config) != 0);
-
     var arg_count: u32 = 0;
 
     while (args.next()) |arg| {
@@ -154,7 +150,6 @@ fn parse_arguments(args: anytype, config: *Config) void {
 }
 
 fn parse_argument(arg: []const u8, config: *Config) void {
-    std.debug.assert(@intFromPtr(config) != 0);
     std.debug.assert(arg.len > 0);
 
     if (std.mem.startsWith(u8, arg, "--seed=")) {
@@ -225,7 +220,6 @@ const FuzzerResult = struct {
 };
 
 fn print_header(config: *const Config) void {
-    std.debug.assert(@intFromPtr(config) != 0);
     std.debug.assert(config.is_valid());
 
     std.debug.print("Fuzzer: Starting...\n", .{});
@@ -236,8 +230,6 @@ fn print_header(config: *const Config) void {
 }
 
 fn print_footer(result: *const FuzzerResult, start_ms: i64) void {
-    std.debug.assert(@intFromPtr(result) != 0);
-
     const now_ms: i64 = @intCast(w32.GetTickCount64());
     const elapsed_ms: i64 = now_ms - start_ms;
 
@@ -254,17 +246,12 @@ fn print_footer(result: *const FuzzerResult, start_ms: i64) void {
 }
 
 fn run_fuzzer(config: *const Config, prng: *std.Random.DefaultPrng, sim: *Simulator, start_ms: i64) FuzzerResult {
-    std.debug.assert(@intFromPtr(config) != 0);
-    std.debug.assert(@intFromPtr(prng) != 0);
-    std.debug.assert(@intFromPtr(sim) != 0);
     std.debug.assert(config.is_valid());
 
     var iteration: u32 = 0;
     var sim_failures: u32 = 0;
 
     while (iteration < config.iterations) : (iteration += 1) {
-        std.debug.assert(iteration < config.iterations);
-
         const iter_seed = prng.random().int(u64);
 
         sim.reseed(iter_seed);
@@ -333,8 +320,6 @@ test "Fuzzer smoke" {
     var iteration: u32 = 0;
 
     while (iteration < config.iterations) : (iteration += 1) {
-        std.debug.assert(iteration < config.iterations);
-
         const iter_seed = prng.random().int(u64);
 
         sim.reseed(iter_seed);

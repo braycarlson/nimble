@@ -328,15 +328,15 @@ pub const Macro = struct {
             return Error.BufferFull;
         }
 
-        const max_text_len: u16 = 254;
-        const text_len_u16: u16 = if (text.len > max_text_len) max_text_len else @intCast(text.len);
-        const total_len: u16 = text_len_u16 + 1;
+        const text_len_max: u16 = 254;
+        const text_len_u16: u16 = if (text.len > text_len_max) text_len_max else @intCast(text.len);
+        const len_total: u16 = text_len_u16 + 1;
 
-        if (total_len > 255) {
+        if (len_total > 255) {
             return Error.TextTooLong;
         }
 
-        if (self.text_len + total_len > text_buffer_max) {
+        if (self.text_len + len_total > text_buffer_max) {
             return Error.BufferFull;
         }
 
@@ -347,12 +347,12 @@ pub const Macro = struct {
         @memcpy(self.text_buffer[start .. start + text_len_u16], text[0..text_len_u16]);
         self.text_buffer[start + text_len_u16] = '\n';
 
-        self.text_len += total_len;
+        self.text_len += len_total;
 
         const action = Action{
             .kind = .text,
             .text_start = start,
-            .text_len = @intCast(total_len),
+            .text_len = @intCast(len_total),
         };
 
         std.debug.assert(action.is_valid());
@@ -765,5 +765,7 @@ fn execute_text_via_message(text: []const u8, hwnd: w32.HWND) void {
 }
 
 fn execute_text_via_simulate(text: []const u8) void {
+    std.debug.assert(text.len <= simulate_text.text_max);
+
     _ = simulate_text.send(text) catch {};
 }

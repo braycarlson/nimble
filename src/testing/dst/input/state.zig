@@ -49,8 +49,6 @@ pub const Event = struct {
     response: ?Response = null,
 
     pub fn is_valid(self: *const Event) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_kind = self.kind.is_valid();
         const result = valid_kind;
 
@@ -71,8 +69,6 @@ pub const Stats = struct {
     invariant_violations: u32 = 0,
 
     pub fn is_valid(self: *const Stats) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_operations = self.total_operations <= self.total_ticks * 10;
         const result = valid_operations;
 
@@ -118,8 +114,6 @@ pub const KeyboardSnapshot = struct {
     active_count: u8 = 0,
 
     pub fn is_valid(self: *const KeyboardSnapshot) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_count = self.active_count <= active_count_max;
         const result = valid_count;
 
@@ -151,8 +145,6 @@ pub const RegistrySnapshot = struct {
     paused: bool = false,
 
     pub fn is_valid(self: *const RegistrySnapshot) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_count = self.count <= 1024;
         const result = valid_count;
 
@@ -166,8 +158,6 @@ pub const Snapshot = struct {
     registry: RegistrySnapshot,
 
     pub fn is_valid(self: *const Snapshot) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_keyboard = self.keyboard.is_valid();
         const valid_registry = self.registry.is_valid();
         const result = valid_keyboard and valid_registry;
@@ -181,7 +171,6 @@ pub const Snapshot = struct {
         tick: u64,
     ) Snapshot {
         std.debug.assert(keyboard.is_valid());
-        std.debug.assert(@intFromPtr(reg_key) != 0);
 
         const result = Snapshot{
             .tick = tick,
@@ -223,9 +212,6 @@ pub const StateChecker = struct {
         keyboard: *Keyboard,
         reg_key: *registry.key.KeyRegistry(1024),
     ) StateChecker {
-        std.debug.assert(@intFromPtr(keyboard) != 0);
-        std.debug.assert(@intFromPtr(reg_key) != 0);
-
         const result = StateChecker{
             .keyboard = keyboard,
             .registry_key = reg_key,
@@ -244,8 +230,6 @@ pub const StateChecker = struct {
     }
 
     pub fn is_valid(self: *const StateChecker) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_keyboard = @intFromPtr(self.keyboard) != 0;
         const valid_registry = @intFromPtr(self.registry_key) != 0;
         const valid_events = self.events_len <= max_events;

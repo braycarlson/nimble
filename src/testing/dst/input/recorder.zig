@@ -23,8 +23,6 @@ pub const HeaderExtra = extern struct {
     reserved: [27]u8 = [_]u8{0} ** 27,
 
     pub fn is_valid(self: *const HeaderExtra) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_snapshot = self.snapshot_count <= state_mod.max_snapshots;
         const result = valid_snapshot;
 
@@ -67,8 +65,6 @@ pub const Recorder = struct {
     format: Format,
 
     pub fn init(allocator: std.mem.Allocator, format: Format) Recorder {
-        std.debug.assert(@intFromPtr(&allocator) != 0);
-
         const result = Recorder{
             .allocator = allocator,
             .buffer = .empty,
@@ -81,7 +77,7 @@ pub const Recorder = struct {
     }
 
     pub fn is_valid(self: *const Recorder) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
+        _ = self;
 
         return true;
     }
@@ -217,8 +213,6 @@ pub const Recording = struct {
     stats: Stats,
 
     pub fn is_valid(self: *const Recording) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_events = self.events.len <= state_mod.max_events;
         const valid_snapshots = self.snapshots.len <= state_mod.max_snapshots;
         const valid_stats = self.stats.is_valid();
@@ -236,7 +230,6 @@ pub const Recording = struct {
     }
 
     pub fn load_from_file(allocator: std.mem.Allocator, path: []const u8) !Recording {
-        std.debug.assert(@intFromPtr(&allocator) != 0);
         std.debug.assert(path.len > 0);
 
         var threaded: std.Io.Threaded = .init_single_threaded;
@@ -256,7 +249,6 @@ pub const Recording = struct {
     }
 
     pub fn parse(allocator: std.mem.Allocator, content: []const u8) !Recording {
-        std.debug.assert(@intFromPtr(&allocator) != 0);
         std.debug.assert(content.len > 0);
 
         const parsed = try std.json.parseFromSlice(JsonRecording, allocator, content, .{
@@ -311,7 +303,6 @@ pub const Recording = struct {
     }
 
     fn parse_events(allocator: std.mem.Allocator, json_events: []const JsonEvent) ![]Event {
-        std.debug.assert(@intFromPtr(&allocator) != 0);
         std.debug.assert(json_events.len <= state_mod.max_events);
 
         var events = try allocator.alloc(Event, json_events.len);

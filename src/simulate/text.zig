@@ -15,6 +15,8 @@ pub const Error = error{
 };
 
 fn _send(text: []const u8, delay_ms: u32) Error!u32 {
+    std.debug.assert(delay_ms <= delay_max_ms);
+
     if (text.len == 0) {
         return 0;
     }
@@ -32,13 +34,18 @@ fn _send(text: []const u8, delay_ms: u32) Error!u32 {
             continue;
         }
 
-        if (char == '\n') {
-            message.post_key_press(hwnd, keycode.@"return");
-        } else {
+        const ok = if (char == '\n')
+            message.post_key_press(hwnd, keycode.@"return")
+        else
             message.post_char(hwnd, char);
+
+        if (!ok) {
+            return Error.SendFailed;
         }
 
         sent += 1;
+
+        std.debug.assert(sent <= text_max);
 
         if (delay_ms > 0) {
             w32.Sleep(delay_ms);

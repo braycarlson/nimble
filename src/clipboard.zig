@@ -12,6 +12,7 @@ pub const Error = error{
     GetFailed,
     LockFailed,
     OpenFailed,
+    SendFailed,
     SetFailed,
 };
 
@@ -108,41 +109,57 @@ pub fn select_all() bool {
     return simulate_key.combination(&modifier.Set.from(.{ .ctrl = true }), 'A');
 }
 
-pub fn select_left(count: u32) void {
+pub fn select_left(count: u32) bool {
     std.debug.assert(count > 0);
 
-    _ = simulate_key.key_down(keycode.lshift);
+    if (!simulate_key.key_down(keycode.lshift)) {
+        return false;
+    }
 
     var i: u32 = 0;
 
     while (i < count) : (i += 1) {
-        _ = simulate_key.press(keycode.left);
+        if (!simulate_key.press(keycode.left)) {
+            _ = simulate_key.key_up(keycode.lshift);
+
+            return false;
+        }
     }
 
-    _ = simulate_key.key_up(keycode.lshift);
+    return simulate_key.key_up(keycode.lshift);
 }
 
-pub fn select_right(count: u32) void {
+pub fn select_right(count: u32) bool {
     std.debug.assert(count > 0);
 
-    _ = simulate_key.key_down(keycode.lshift);
+    if (!simulate_key.key_down(keycode.lshift)) {
+        return false;
+    }
 
     var i: u32 = 0;
 
     while (i < count) : (i += 1) {
-        _ = simulate_key.press(keycode.right);
+        if (!simulate_key.press(keycode.right)) {
+            _ = simulate_key.key_up(keycode.lshift);
+
+            return false;
+        }
     }
 
-    _ = simulate_key.key_up(keycode.lshift);
+    return simulate_key.key_up(keycode.lshift);
 }
 
 pub fn replace(select_count: u32, text: []const u8) Error!void {
     std.debug.assert(select_count > 0);
     std.debug.assert(text.len > 0);
 
-    select_left(select_count);
+    if (!select_left(select_count)) {
+        return Error.SendFailed;
+    }
 
     try set(text);
 
-    _ = paste();
+    if (!paste()) {
+        return Error.SendFailed;
+    }
 }

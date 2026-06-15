@@ -47,6 +47,8 @@ pub const Entry = struct {
     }
 
     pub fn get_name(self: *const Entry) []const u8 {
+        std.debug.assert(self.name_len <= name_max);
+
         return self.name[0..self.name_len];
     }
 
@@ -164,6 +166,7 @@ pub fn CommandRegistry(comptime capacity: u8) type {
 
         pub fn process(self: *Self, key: *const Key) Response {
             std.debug.assert(self.is_valid());
+            std.debug.assert(key.is_valid());
 
             if (!self.enabled) {
                 return .pass;
@@ -233,6 +236,8 @@ pub fn CommandRegistry(comptime capacity: u8) type {
                 name_buf[i] = self.buffer.get(@intCast(i + 1)) orelse return .pass;
             }
 
+            std.debug.assert(name_len <= name_max);
+
             const name = name_buf[0..name_len];
 
             var args_start = name_end;
@@ -261,6 +266,8 @@ pub fn CommandRegistry(comptime capacity: u8) type {
                 args_len += 1;
             }
 
+            std.debug.assert(args_len <= buffer_max);
+
             const args = args_buf[0..args_len];
 
             for (&self.entries) |*entry| {
@@ -277,7 +284,11 @@ pub fn CommandRegistry(comptime capacity: u8) type {
         fn find_empty_slot(self: *const Self) ?u8 {
             for (0..capacity) |i| {
                 if (!self.entries[i].active) {
-                    return @intCast(i);
+                    const slot: u8 = @intCast(i);
+
+                    std.debug.assert(slot < capacity);
+
+                    return slot;
                 }
             }
 

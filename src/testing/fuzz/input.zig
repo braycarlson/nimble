@@ -36,8 +36,6 @@ const common_keys = [common_key_count]u8{
 };
 
 pub fn random_key_keycode(random: *std.Random) u8 {
-    std.debug.assert(@intFromPtr(random) != 0);
-
     const result = random.intRangeAtMost(u8, key_value_min, key_value_max);
 
     std.debug.assert(result >= key_value_min);
@@ -48,8 +46,6 @@ pub fn random_key_keycode(random: *std.Random) u8 {
 }
 
 pub fn random_non_modifier_key_keycode(random: *std.Random) u8 {
-    std.debug.assert(@intFromPtr(random) != 0);
-
     var attempts: u8 = 0;
     var result: u8 = random.intRangeAtMost(u8, key_value_min, key_value_max);
 
@@ -67,8 +63,6 @@ pub fn random_non_modifier_key_keycode(random: *std.Random) u8 {
 }
 
 pub fn random_common_key(random: *std.Random) u8 {
-    std.debug.assert(@intFromPtr(random) != 0);
-
     const idx = random.intRangeLessThan(u8, 0, common_key_count);
 
     std.debug.assert(idx < common_key_count);
@@ -82,8 +76,6 @@ pub fn random_common_key(random: *std.Random) u8 {
 }
 
 pub fn random_modifier_keycode(random: *std.Random) u8 {
-    std.debug.assert(@intFromPtr(random) != 0);
-
     const idx = random.intRangeLessThan(u8, 0, modifier_keycode_count);
 
     std.debug.assert(idx < modifier_keycode_count);
@@ -97,8 +89,6 @@ pub fn random_modifier_keycode(random: *std.Random) u8 {
 }
 
 pub fn random_alpha_key(random: *std.Random) u8 {
-    std.debug.assert(@intFromPtr(random) != 0);
-
     const result = random.intRangeAtMost(u8, alpha_key_min, alpha_key_max);
 
     std.debug.assert(result >= alpha_key_min);
@@ -108,8 +98,6 @@ pub fn random_alpha_key(random: *std.Random) u8 {
 }
 
 pub fn random_digit_key(random: *std.Random) u8 {
-    std.debug.assert(@intFromPtr(random) != 0);
-
     const result = random.intRangeAtMost(u8, digit_key_min, digit_key_max);
 
     std.debug.assert(result >= digit_key_min);
@@ -119,8 +107,6 @@ pub fn random_digit_key(random: *std.Random) u8 {
 }
 
 pub fn random_function_key(random: *std.Random) u8 {
-    std.debug.assert(@intFromPtr(random) != 0);
-
     const result = random.intRangeAtMost(u8, keycode.f1, keycode.f12);
 
     std.debug.assert(result >= keycode.f1);
@@ -131,8 +117,6 @@ pub fn random_function_key(random: *std.Random) u8 {
 }
 
 pub fn random_numpad_key(random: *std.Random) u8 {
-    std.debug.assert(@intFromPtr(random) != 0);
-
     const result = random.intRangeAtMost(u8, keycode.numpad0, keycode.numpad9);
 
     std.debug.assert(result >= keycode.numpad0);
@@ -148,8 +132,6 @@ pub fn is_modifier_keycode(value: u8) bool {
     var i: u8 = 0;
 
     while (i < modifier_keycode_count) : (i += 1) {
-        std.debug.assert(i < modifier_keycode_count);
-
         if (value == modifier_keycodes[i]) {
             std.debug.assert(keycode.is_modifier(value));
 
@@ -163,7 +145,6 @@ pub fn is_modifier_keycode(value: u8) bool {
 }
 
 pub fn fuzz_binding(random: *std.Random, iterations: u32) !void {
-    std.debug.assert(@intFromPtr(random) != 0);
     std.debug.assert(iterations > 0);
     std.debug.assert(iterations <= iteration_max);
 
@@ -173,8 +154,6 @@ pub fn fuzz_binding(random: *std.Random, iterations: u32) !void {
     var iteration: u32 = 0;
 
     while (iteration < iterations) : (iteration += 1) {
-        std.debug.assert(iteration < iterations);
-
         const key_keycode = random_non_modifier_key_keycode(random);
         const mods = common.random_modifier_set_limited(random, 3);
         const binding = Binding.init(key_keycode, mods);
@@ -205,7 +184,6 @@ fn apply_binding_to_keyboard(
     key_keycode: u8,
     mods: *const modifier.Set,
 ) void {
-    std.debug.assert(@intFromPtr(keyboard) != 0);
     std.debug.assert(keycode.is_valid(key_keycode));
     std.debug.assert(mods.flags <= modifier.flag_all);
 
@@ -234,7 +212,6 @@ fn apply_binding_to_keyboard(
 }
 
 pub fn fuzz_keyboard(random: *std.Random, iterations: u32) !void {
-    std.debug.assert(@intFromPtr(random) != 0);
     std.debug.assert(iterations > 0);
     std.debug.assert(iterations <= iteration_max);
 
@@ -246,8 +223,6 @@ pub fn fuzz_keyboard(random: *std.Random, iterations: u32) !void {
     std.debug.assert(keyboard.count() == 0);
 
     while (iteration < iterations) : (iteration += 1) {
-        std.debug.assert(iteration < iterations);
-
         const operation = random.intRangeLessThan(u8, 0, 100);
 
         std.debug.assert(operation < 100);
@@ -263,8 +238,6 @@ fn execute_keyboard_operation(
     random: *std.Random,
     operation: u8,
 ) void {
-    std.debug.assert(@intFromPtr(keyboard) != 0);
-    std.debug.assert(@intFromPtr(random) != 0);
     std.debug.assert(operation < 100);
 
     if (operation < operation_threshold_keydown) {
@@ -277,9 +250,6 @@ fn execute_keyboard_operation(
 }
 
 fn execute_keydown_operation(keyboard: *input.state.Keyboard, random: *std.Random) void {
-    std.debug.assert(@intFromPtr(keyboard) != 0);
-    std.debug.assert(@intFromPtr(random) != 0);
-
     const key = random_key_keycode(random);
 
     std.debug.assert(keycode.is_valid(key));
@@ -290,9 +260,6 @@ fn execute_keydown_operation(keyboard: *input.state.Keyboard, random: *std.Rando
 }
 
 fn execute_keyup_operation(keyboard: *input.state.Keyboard, random: *std.Random) void {
-    std.debug.assert(@intFromPtr(keyboard) != 0);
-    std.debug.assert(@intFromPtr(random) != 0);
-
     const key = random_key_keycode(random);
 
     std.debug.assert(keycode.is_valid(key));
@@ -303,8 +270,6 @@ fn execute_keyup_operation(keyboard: *input.state.Keyboard, random: *std.Random)
 }
 
 fn execute_clear_operation(keyboard: *input.state.Keyboard) void {
-    std.debug.assert(@intFromPtr(keyboard) != 0);
-
     keyboard.clear();
 
     std.debug.assert(keyboard.count() == 0);
@@ -324,8 +289,6 @@ pub const KeySequence = struct {
     }
 
     pub fn is_valid(self: *const KeySequence) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_len = self.len <= sequence_capacity;
         const result = valid_len;
 
@@ -417,8 +380,6 @@ test "random_key_keycode produces valid keycodes" {
     var i: u32 = 0;
 
     while (i < 100) : (i += 1) {
-        std.debug.assert(i < 100);
-
         const key = random_key_keycode(&random);
 
         std.debug.assert(keycode.is_valid(key));
@@ -436,8 +397,6 @@ test "random_non_modifier_key_keycode excludes modifiers" {
     var i: u32 = 0;
 
     while (i < 100) : (i += 1) {
-        std.debug.assert(i < 100);
-
         const key = random_non_modifier_key_keycode(&random);
 
         std.debug.assert(!keycode.is_modifier(key));
@@ -455,8 +414,6 @@ test "random_modifier_keycode produces only modifiers" {
     var i: u32 = 0;
 
     while (i < 100) : (i += 1) {
-        std.debug.assert(i < 100);
-
         const key = random_modifier_keycode(&random);
 
         std.debug.assert(keycode.is_modifier(key));
@@ -530,8 +487,6 @@ test "KeySequence capacity limit" {
     var i: u8 = 0;
 
     while (i < sequence_capacity) : (i += 1) {
-        std.debug.assert(i < sequence_capacity);
-
         seq.push(i + key_value_min);
     }
 

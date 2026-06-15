@@ -21,8 +21,6 @@ pub fn EventStore(comptime Event: type, comptime max_events: u32) type {
         }
 
         pub fn is_valid(self: *const Self) bool {
-            std.debug.assert(@intFromPtr(self) != 0);
-
             const valid_count = self.count <= max_events;
             const valid_init = self.initialized;
             const result = valid_count and valid_init;
@@ -258,8 +256,6 @@ pub fn TickTracker(comptime max_tick_default: u32) type {
         }
 
         pub fn is_valid(self: *const Self) bool {
-            std.debug.assert(@intFromPtr(self) != 0);
-
             const valid_bounds = self.current <= self.max or self.max == 0;
             const valid_init = self.initialized;
             const result = valid_bounds and valid_init;
@@ -360,8 +356,6 @@ pub fn SeedStore() type {
         }
 
         pub fn is_valid(self: *const Self) bool {
-            std.debug.assert(@intFromPtr(self) != 0);
-
             const result = self.initialized;
 
             return result;
@@ -423,8 +417,6 @@ pub fn KeyboardState() type {
         }
 
         pub fn is_valid(self: *const Self) bool {
-            std.debug.assert(@intFromPtr(self) != 0);
-
             const result = self.initialized;
 
             return result;
@@ -458,14 +450,10 @@ pub fn KeyboardState() type {
         }
 
         pub fn count(self: *const Self) u32 {
-            std.debug.assert(@intFromPtr(self) != 0);
-
             var result: u32 = 0;
             var i: u32 = 0;
 
             while (i < key_count) : (i += 1) {
-                std.debug.assert(i < key_count);
-
                 if (self.keys_down[i]) {
                     result += 1;
                 }

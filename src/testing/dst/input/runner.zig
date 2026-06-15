@@ -37,8 +37,6 @@ pub const RunnerConfig = struct {
     prevent_duplicate_mods: bool = true,
 
     pub fn is_valid(self: *const RunnerConfig) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_ticks = self.max_ticks > 0;
         const valid_fault = self.fault_probability <= 100;
         const valid_keys = self.max_keys <= 16;
@@ -67,7 +65,6 @@ pub fn main(init: std.process.Init) !void {
 }
 
 fn free_config_strings(allocator: std.mem.Allocator, config: *const RunnerConfig) void {
-    std.debug.assert(@intFromPtr(&allocator) != 0);
     std.debug.assert(config.is_valid());
 
     if (config.output_path) |p| {
@@ -80,8 +77,6 @@ fn free_config_strings(allocator: std.mem.Allocator, config: *const RunnerConfig
 }
 
 fn parse_args(args: std.process.Args, allocator: std.mem.Allocator) !RunnerConfig {
-    std.debug.assert(@intFromPtr(&allocator) != 0);
-
     var config = RunnerConfig{};
     var parser = try common.ArgParser.init(args, allocator);
     defer parser.deinit();
@@ -107,8 +102,6 @@ fn parse_args(args: std.process.Args, allocator: std.mem.Allocator) !RunnerConfi
 }
 
 fn parse_single_arg(config: *RunnerConfig, allocator: std.mem.Allocator, arg: []const u8) void {
-    std.debug.assert(@intFromPtr(config) != 0);
-    std.debug.assert(@intFromPtr(&allocator) != 0);
     std.debug.assert(arg.len > 0);
 
     if (std.mem.startsWith(u8, arg, "--seed=")) {
@@ -185,7 +178,6 @@ fn parse_profile(profile_str: []const u8) TestProfile {
 }
 
 fn run_vopr(allocator: std.mem.Allocator, config: RunnerConfig) !void {
-    std.debug.assert(@intFromPtr(&allocator) != 0);
     std.debug.assert(config.is_valid());
 
     const seed = config.seed orelse common.random_seed();
@@ -264,7 +256,6 @@ fn print_vopr_results(vopr: *const VOPR, result: VOPRResult, start_time: i64, en
 }
 
 fn write_recording(allocator: std.mem.Allocator, vopr: *const VOPR, path: []const u8, format: Format) !void {
-    std.debug.assert(@intFromPtr(&allocator) != 0);
     std.debug.assert(vopr.is_valid());
     std.debug.assert(path.len > 0);
 
@@ -299,7 +290,6 @@ fn stats_to_array(stats: *const Stats) [InputStats.field_count]u64 {
 }
 
 fn run_replay(allocator: std.mem.Allocator, path: []const u8, verbose: bool) !void {
-    std.debug.assert(@intFromPtr(&allocator) != 0);
     std.debug.assert(path.len > 0);
 
     common.print_header("Loading Recording");

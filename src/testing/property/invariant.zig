@@ -14,8 +14,6 @@ pub const Invariant = struct {
     check: *const fn (*const Context) bool,
 
     pub fn is_valid(self: *const Invariant) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_name = self.name.len > 0;
         const valid_check = @intFromPtr(self.check) != 0;
         const result = valid_name and valid_check;
@@ -30,8 +28,6 @@ pub const Context = struct {
     last_down: bool = false,
 
     pub fn is_valid(self: *const Context) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_keyboard = @intFromPtr(self.keyboard) != 0;
         const valid_last_key = self.last_key == null or keycode.is_valid(self.last_key.?);
         const result = valid_keyboard and valid_last_key;
@@ -41,9 +37,7 @@ pub const Context = struct {
 };
 
 pub fn keyboard_down_consistency(ctx: *const Context) bool {
-    std.debug.assert(@intFromPtr(ctx) != 0);
     std.debug.assert(ctx.is_valid());
-    std.debug.assert(@intFromPtr(ctx.keyboard) != 0);
 
     const keyboard = ctx.keyboard;
 
@@ -63,9 +57,7 @@ pub fn keyboard_down_consistency(ctx: *const Context) bool {
 }
 
 pub fn keyboard_modifier_implication(ctx: *const Context) bool {
-    std.debug.assert(@intFromPtr(ctx) != 0);
     std.debug.assert(ctx.is_valid());
-    std.debug.assert(@intFromPtr(ctx.keyboard) != 0);
 
     const keyboard = ctx.keyboard;
 
@@ -81,7 +73,6 @@ pub fn keyboard_modifier_implication(ctx: *const Context) bool {
 }
 
 fn check_shift_implication(keyboard: *const Keyboard) bool {
-    std.debug.assert(@intFromPtr(keyboard) != 0);
     std.debug.assert(keyboard.is_valid());
 
     const left_down = keyboard.is_down(keycode.lshift);
@@ -97,7 +88,6 @@ fn check_shift_implication(keyboard: *const Keyboard) bool {
 }
 
 fn check_ctrl_implication(keyboard: *const Keyboard) bool {
-    std.debug.assert(@intFromPtr(keyboard) != 0);
     std.debug.assert(keyboard.is_valid());
 
     const left_down = keyboard.is_down(keycode.lctrl);
@@ -113,7 +103,6 @@ fn check_ctrl_implication(keyboard: *const Keyboard) bool {
 }
 
 fn check_alt_implication(keyboard: *const Keyboard) bool {
-    std.debug.assert(@intFromPtr(keyboard) != 0);
     std.debug.assert(keyboard.is_valid());
 
     const left_down = keyboard.is_down(keycode.lmenu);
@@ -129,9 +118,7 @@ fn check_alt_implication(keyboard: *const Keyboard) bool {
 }
 
 pub fn keyboard_count_consistency(ctx: *const Context) bool {
-    std.debug.assert(@intFromPtr(ctx) != 0);
     std.debug.assert(ctx.is_valid());
-    std.debug.assert(@intFromPtr(ctx.keyboard) != 0);
 
     const keyboard = ctx.keyboard;
 
@@ -144,9 +131,7 @@ pub fn keyboard_count_consistency(ctx: *const Context) bool {
 }
 
 pub fn keyboard_helper_consistency(ctx: *const Context) bool {
-    std.debug.assert(@intFromPtr(ctx) != 0);
     std.debug.assert(ctx.is_valid());
-    std.debug.assert(@intFromPtr(ctx.keyboard) != 0);
 
     const keyboard = ctx.keyboard;
 
@@ -186,7 +171,6 @@ fn check_modifier_flag_consistency(
     left_key: u8,
     right_key: u8,
 ) bool {
-    std.debug.assert(@intFromPtr(keyboard) != 0);
     std.debug.assert(keyboard.is_valid());
     std.debug.assert(keycode.is_valid(left_key));
     std.debug.assert(keycode.is_valid(right_key));
@@ -210,15 +194,11 @@ pub const keyboard_invariants = [invariant_count]Invariant{
 };
 
 pub fn check_all(ctx: *const Context) ?[]const u8 {
-    std.debug.assert(@intFromPtr(ctx) != 0);
     std.debug.assert(ctx.is_valid());
-    std.debug.assert(@intFromPtr(ctx.keyboard) != 0);
 
     var i: u8 = 0;
 
     while (i < invariant_count) : (i += 1) {
-        std.debug.assert(i < invariant_count);
-
         const inv = keyboard_invariants[i];
 
         std.debug.assert(inv.is_valid());
@@ -236,15 +216,12 @@ pub fn check_all(ctx: *const Context) ?[]const u8 {
 }
 
 pub fn check_single(ctx: *const Context, name: []const u8) bool {
-    std.debug.assert(@intFromPtr(ctx) != 0);
     std.debug.assert(ctx.is_valid());
     std.debug.assert(name.len > 0);
 
     var i: u8 = 0;
 
     while (i < invariant_count) : (i += 1) {
-        std.debug.assert(i < invariant_count);
-
         const inv = keyboard_invariants[i];
 
         std.debug.assert(inv.is_valid());
@@ -477,8 +454,6 @@ test "all invariants have valid names" {
     var i: u8 = 0;
 
     while (i < invariant_count) : (i += 1) {
-        std.debug.assert(i < invariant_count);
-
         const inv = keyboard_invariants[i];
 
         std.debug.assert(inv.is_valid());

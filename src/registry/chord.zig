@@ -82,6 +82,8 @@ pub const Entry = struct {
     }
 
     pub fn invoke(self: *const Entry) ?Response {
+        std.debug.assert(self.is_active());
+
         return self.base.invoke(.{});
     }
 
@@ -256,6 +258,8 @@ pub fn ChordRegistry(comptime capacity: u32) type {
                 if (!e.is_active()) {
                     continue;
                 }
+
+                std.debug.assert(slot < capacity);
 
                 if (!e.matches_filter()) {
                     self.progress[slot] = 0;

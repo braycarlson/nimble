@@ -93,8 +93,6 @@ pub const Replayer = struct {
     }
 
     pub fn is_valid(self: *const Replayer) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_keyboard = self.keyboard.is_valid();
         const valid_state = self.state.is_valid();
         const result = valid_keyboard and valid_state;
@@ -124,7 +122,6 @@ pub const Replayer = struct {
 
     pub fn set_callback(self: *Replayer, callback: ReplayCallback, context: ?*anyopaque) void {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromPtr(callback) != 0);
 
         self.callback = callback;
         self.callback_context = context;

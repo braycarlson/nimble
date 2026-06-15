@@ -152,7 +152,6 @@ pub fn property_modifier_set_flags() !void {
 }
 
 fn verify_modifier_consistency(mods: *const modifier.Set, flags: u4) void {
-    std.debug.assert(@intFromPtr(mods) != 0);
     std.debug.assert(flags <= modifier_flag_max);
 
     const has_ctrl = (flags & modifier.flag_ctrl) != 0;
@@ -294,7 +293,6 @@ fn setup_keyboard_for_binding(
     key: u8,
     mods: *const modifier.Set,
 ) void {
-    std.debug.assert(@intFromPtr(keyboard) != 0);
     std.debug.assert(keycode.is_valid(key));
     std.debug.assert(mods.flags <= modifier_flag_max);
 

@@ -59,8 +59,6 @@ pub fn parse_seed(text: []const u8) u64 {
 }
 
 pub fn random_enum(comptime E: type, random: *std.Random) E {
-    std.debug.assert(@intFromPtr(random) != 0);
-
     const fields = @typeInfo(E).@"enum".fields;
 
     comptime std.debug.assert(fields.len > 0);
@@ -76,8 +74,6 @@ pub fn random_enum(comptime E: type, random: *std.Random) E {
 }
 
 pub fn random_enum_excluding(comptime E: type, random: *std.Random, exclude: E) E {
-    std.debug.assert(@intFromPtr(random) != 0);
-
     const fields = @typeInfo(E).@"enum".fields;
 
     comptime std.debug.assert(fields.len > 1);
@@ -98,8 +94,6 @@ pub fn random_enum_excluding(comptime E: type, random: *std.Random, exclude: E) 
         var i: usize = 0;
 
         while (i < fields.len) : (i += 1) {
-            std.debug.assert(i < fields.len);
-
             const candidate: E = @enumFromInt(fields[i].value);
 
             if (candidate != exclude) {
@@ -116,8 +110,6 @@ pub fn random_enum_excluding(comptime E: type, random: *std.Random, exclude: E) 
 }
 
 pub fn random_bool(random: *std.Random) bool {
-    std.debug.assert(@intFromPtr(random) != 0);
-
     const value = random.intRangeLessThan(u8, 0, 2);
 
     std.debug.assert(value == 0 or value == 1);
@@ -128,7 +120,6 @@ pub fn random_bool(random: *std.Random) bool {
 }
 
 pub fn random_bool_weighted(random: *std.Random, true_probability: u8) bool {
-    std.debug.assert(@intFromPtr(random) != 0);
     std.debug.assert(true_probability <= 100);
 
     const roll = random.intRangeLessThan(u8, 0, 100);
@@ -141,7 +132,6 @@ pub fn random_bool_weighted(random: *std.Random, true_probability: u8) bool {
 }
 
 pub fn random_from_slice(comptime T: type, random: *std.Random, items: []const T) T {
-    std.debug.assert(@intFromPtr(random) != 0);
     std.debug.assert(items.len > 0);
     std.debug.assert(items.len <= iteration_max);
 
@@ -155,8 +145,6 @@ pub fn random_from_slice(comptime T: type, random: *std.Random, items: []const T
 }
 
 pub fn random_modifier_set(random: *std.Random) modifier.Set {
-    std.debug.assert(@intFromPtr(random) != 0);
-
     const flags = random.intRangeAtMost(u4, 0, modifier_flag_max);
 
     std.debug.assert(flags <= modifier_flag_max);
@@ -169,7 +157,6 @@ pub fn random_modifier_set(random: *std.Random) modifier.Set {
 }
 
 pub fn random_modifier_set_limited(random: *std.Random, max_modifiers: u8) modifier.Set {
-    std.debug.assert(@intFromPtr(random) != 0);
     std.debug.assert(max_modifiers <= modifier_limit_max);
 
     var flags: u4 = 0;
@@ -217,7 +204,6 @@ fn get_modifier_flag_by_index(idx: u8) u4 {
 }
 
 pub fn weighted_select(comptime T: type, random: *std.Random, items: []const T, weights: []const u32) T {
-    std.debug.assert(@intFromPtr(random) != 0);
     std.debug.assert(items.len > 0);
     std.debug.assert(items.len == weights.len);
     std.debug.assert(items.len <= iteration_max);
@@ -271,7 +257,6 @@ fn compute_weight_total(weights: []const u32) u32 {
 }
 
 pub fn shuffle(comptime T: type, random: *std.Random, items: []T) void {
-    std.debug.assert(@intFromPtr(random) != 0);
     std.debug.assert(items.len <= iteration_max);
 
     if (items.len <= 1) {
@@ -337,8 +322,6 @@ test "random_bool distribution" {
     var i: u32 = 0;
 
     while (i < 1000) : (i += 1) {
-        std.debug.assert(i < 1000);
-
         if (random_bool(&random)) {
             true_count += 1;
         }
@@ -359,8 +342,6 @@ test "random_bool_weighted probability" {
     var i: u32 = 0;
 
     while (i < 1000) : (i += 1) {
-        std.debug.assert(i < 1000);
-
         if (random_bool_weighted(&random, 80)) {
             true_count += 1;
         }
@@ -377,8 +358,6 @@ test "random_modifier_set_limited respects limit" {
     var i: u32 = 0;
 
     while (i < 100) : (i += 1) {
-        std.debug.assert(i < 100);
-
         const mods = random_modifier_set_limited(&random, 2);
 
         std.debug.assert(mods.count() <= 2);
@@ -398,8 +377,6 @@ test "weighted_select distribution" {
     var i: u32 = 0;
 
     while (i < 1000) : (i += 1) {
-        std.debug.assert(i < 1000);
-
         const result = weighted_select(u8, &random, &items, &weights);
 
         if (result == 'A') {
@@ -424,8 +401,6 @@ test "shuffle changes order" {
     var i: u8 = 0;
 
     while (i < items.len) : (i += 1) {
-        std.debug.assert(i < items.len);
-
         if (items[i] == original[i]) {
             same_count += 1;
         }
@@ -449,8 +424,6 @@ test "random_enum produces valid values" {
     var i: u32 = 0;
 
     while (i < 100) : (i += 1) {
-        std.debug.assert(i < 100);
-
         const value = random_enum(TestEnum, &random);
 
         seen[@intFromEnum(value)] = true;
@@ -476,8 +449,6 @@ test "random_enum_excluding respects exclusion" {
     var i: u32 = 0;
 
     while (i < 100) : (i += 1) {
-        std.debug.assert(i < 100);
-
         const value = random_enum_excluding(TestEnum, &random, .first);
 
         std.debug.assert(value != .first);

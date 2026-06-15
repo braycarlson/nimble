@@ -10,8 +10,6 @@ pub const ArgParser = struct {
     initialized: bool = false,
 
     pub fn init(args: std.process.Args, allocator: std.mem.Allocator) !ArgParser {
-        std.debug.assert(@intFromPtr(&allocator.vtable) != 0);
-
         var iterator = try args.iterateAllocator(allocator);
         _ = iterator.skip();
 
@@ -26,8 +24,6 @@ pub const ArgParser = struct {
     }
 
     pub fn is_valid(self: *const ArgParser) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const result = self.initialized;
 
         return result;
@@ -68,7 +64,6 @@ pub fn parse_int_arg(comptime T: type, arg: []const u8, prefix: []const u8, defa
 }
 
 pub fn parse_string_arg(allocator: std.mem.Allocator, arg: []const u8, prefix: []const u8) ?[]u8 {
-    std.debug.assert(@intFromPtr(&allocator.vtable) != 0);
     std.debug.assert(prefix.len > 0);
     std.debug.assert(prefix.len <= arg_max);
 

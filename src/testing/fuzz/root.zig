@@ -83,7 +83,6 @@ pub const KeyPermutation = struct {
     }
 
     pub fn generate(self: *KeyPermutation, count: u8) void {
-        std.debug.assert(@intFromPtr(self) != 0);
         std.debug.assert(count <= key_permutation_capacity);
 
         var random = self.prng.random();
@@ -93,7 +92,6 @@ pub const KeyPermutation = struct {
         var i: u8 = 0;
 
         while (i < self.len) : (i += 1) {
-            std.debug.assert(i < self.len);
             std.debug.assert(i < key_permutation_capacity);
 
             self.keys[i] = input.random_non_modifier_key_code(&random);
@@ -138,15 +136,11 @@ pub const ModifierPermutation = struct {
     }
 
     pub fn generate_all(self: *ModifierPermutation) void {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         self.len = modifier_permutation_capacity;
 
         var i: u8 = 0;
 
         while (i < modifier_permutation_capacity) : (i += 1) {
-            std.debug.assert(i < modifier_permutation_capacity);
-
             self.combinations[i] = @intCast(i);
         }
 
@@ -155,7 +149,6 @@ pub const ModifierPermutation = struct {
     }
 
     pub fn generate_random(self: *ModifierPermutation, count: u8) void {
-        std.debug.assert(@intFromPtr(self) != 0);
         std.debug.assert(count <= modifier_permutation_capacity);
 
         var random = self.prng.random();
@@ -165,7 +158,6 @@ pub const ModifierPermutation = struct {
         var i: u8 = 0;
 
         while (i < self.len) : (i += 1) {
-            std.debug.assert(i < self.len);
             std.debug.assert(i < modifier_permutation_capacity);
 
             self.combinations[i] = random.int(u4);
@@ -224,7 +216,6 @@ pub const InputSequence = struct {
     }
 
     pub fn generate_realistic(self: *InputSequence, length: u16) void {
-        std.debug.assert(@intFromPtr(self) != 0);
         std.debug.assert(length <= event_sequence_capacity);
 
         var random = self.prng.random();
@@ -250,10 +241,6 @@ pub const InputSequence = struct {
 };
 
 fn generate_key_events(seq: *InputSequence, random: *std.Random, held_keys: *input.KeySequence, length: u16) void {
-    std.debug.assert(@intFromPtr(seq) != 0);
-    std.debug.assert(@intFromPtr(random) != 0);
-    std.debug.assert(@intFromPtr(held_keys) != 0);
-
     var i: u16 = 0;
 
     while (i < length and seq.len < event_sequence_capacity) : (i += 1) {
@@ -272,9 +259,6 @@ fn generate_key_events(seq: *InputSequence, random: *std.Random, held_keys: *inp
 }
 
 fn release_key(seq: *InputSequence, random: *std.Random, held_keys: *input.KeySequence) void {
-    std.debug.assert(@intFromPtr(seq) != 0);
-    std.debug.assert(@intFromPtr(random) != 0);
-    std.debug.assert(@intFromPtr(held_keys) != 0);
     std.debug.assert(held_keys.len > 0);
 
     const key = held_keys.pop();
@@ -293,10 +277,6 @@ fn release_key(seq: *InputSequence, random: *std.Random, held_keys: *input.KeySe
 }
 
 fn press_key(seq: *InputSequence, random: *std.Random, held_keys: *input.KeySequence) void {
-    std.debug.assert(@intFromPtr(seq) != 0);
-    std.debug.assert(@intFromPtr(random) != 0);
-    std.debug.assert(@intFromPtr(held_keys) != 0);
-
     const key = input.random_common_key(random);
 
     if (!held_keys.contains(key)) {
@@ -315,10 +295,6 @@ fn press_key(seq: *InputSequence, random: *std.Random, held_keys: *input.KeySequ
 }
 
 fn release_remaining_keys(seq: *InputSequence, random: *std.Random, held_keys: *input.KeySequence) void {
-    std.debug.assert(@intFromPtr(seq) != 0);
-    std.debug.assert(@intFromPtr(random) != 0);
-    std.debug.assert(@intFromPtr(held_keys) != 0);
-
     var j: u16 = 0;
 
     while (held_keys.len > 0 and seq.len < event_sequence_capacity and j < event_sequence_capacity) : (j += 1) {

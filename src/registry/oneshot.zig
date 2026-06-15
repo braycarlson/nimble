@@ -52,6 +52,11 @@ pub const Entry = struct {
     }
 
     pub fn invoke(self: *const Entry, key: *const Key) ?Response {
+        std.debug.assert(self.is_active());
+        std.debug.assert(self.get_callback() != null);
+        std.debug.assert(self.get_context() != null);
+        std.debug.assert(key.is_valid());
+
         return self.base.invoke(.{key});
     }
 };

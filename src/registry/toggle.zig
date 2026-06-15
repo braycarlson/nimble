@@ -57,10 +57,16 @@ pub const Entry = struct {
     }
 
     pub fn invoke_action(self: *const Entry, key: *const Key) ?Response {
+        std.debug.assert(self.is_active());
+        std.debug.assert(self.get_context() != null);
+        std.debug.assert(key.is_valid());
+
         return self.base.invoke(.{key});
     }
 
     pub fn invoke_toggle(self: *Entry) void {
+        std.debug.assert(self.is_active());
+
         if (self.toggle_callback) |callback| {
             if (self.base.get_context()) |context| {
                 callback(context, self.base.enabled);

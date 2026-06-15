@@ -10,6 +10,8 @@ pub const ParsedPattern = struct {
 
 pub fn parse(comptime pattern: []const u8) ParsedPattern {
     comptime {
+        std.debug.assert(pattern.len != 0);
+
         var mods = modifier.Set.Args{};
         var start: u32 = 0;
         var key_value: u8 = 0;
@@ -33,6 +35,8 @@ pub fn parse(comptime pattern: []const u8) ParsedPattern {
 }
 
 fn parse_modifier(part: []const u8, current: modifier.Set.Args) modifier.Set.Args {
+    std.debug.assert(part.len > 0);
+
     var result = current;
 
     if (std.mem.eql(u8, part, "Ctrl") or std.mem.eql(u8, part, "ctrl")) {
@@ -49,6 +53,8 @@ fn parse_modifier(part: []const u8, current: modifier.Set.Args) modifier.Set.Arg
 }
 
 fn parse_key(part: []const u8) u8 {
+    std.debug.assert(part.len > 0);
+
     if (part.len == 1) {
         return std.ascii.toUpper(part[0]);
     }

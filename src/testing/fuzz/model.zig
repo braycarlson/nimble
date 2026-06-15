@@ -40,7 +40,6 @@ pub const Operation = union(enum) {
     clear: void,
 
     pub fn apply(self: Operation, keyboard: *Keyboard) void {
-        std.debug.assert(@intFromPtr(keyboard) != 0);
         std.debug.assert(keyboard.is_valid());
 
         switch (self) {
@@ -67,7 +66,6 @@ pub const Operation = union(enum) {
     }
 
     pub fn apply_to_model(self: Operation, model: *Model) void {
-        std.debug.assert(@intFromPtr(model) != 0);
         std.debug.assert(model.is_valid());
 
         switch (self) {
@@ -141,7 +139,7 @@ pub const Model = struct {
     }
 
     pub fn is_valid(self: *const Model) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
+        _ = self;
 
         const result = true;
 
@@ -193,8 +191,6 @@ pub const Model = struct {
         var i: u16 = 0;
 
         while (i < key_count) : (i += 1) {
-            std.debug.assert(i < key_count);
-
             self.keys_down[i] = false;
         }
 
@@ -252,7 +248,6 @@ pub const Model = struct {
 
         while (i <= keycode.value_max) : (i += 1) {
             std.debug.assert(i >= keycode.value_min);
-            std.debug.assert(i <= keycode.value_max);
 
             if (self.keys_down[i]) {
                 result += 1;
@@ -267,14 +262,12 @@ pub const Model = struct {
 
     pub fn matches(self: *const Model, keyboard: *const Keyboard) bool {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromPtr(keyboard) != 0);
         std.debug.assert(keyboard.is_valid());
 
         var i: u16 = keycode.value_min;
 
         while (i <= keycode.value_max) : (i += 1) {
             std.debug.assert(i >= keycode.value_min);
-            std.debug.assert(i <= keycode.value_max);
 
             const key: u8 = @intCast(i);
             const model_down = self.keys_down[key];
@@ -295,8 +288,6 @@ pub fn is_generic_modifier(key: u8) bool {
     var i: u8 = 0;
 
     while (i < generic_modifier_count) : (i += 1) {
-        std.debug.assert(i < generic_modifier_count);
-
         if (key == generic_modifiers[i]) {
             return true;
         }
@@ -311,8 +302,6 @@ pub fn is_specific_modifier(key: u8) bool {
     var i: u8 = 0;
 
     while (i < specific_modifier_count) : (i += 1) {
-        std.debug.assert(i < specific_modifier_count);
-
         if (key == specific_modifiers[i]) {
             return true;
         }
@@ -330,8 +319,6 @@ pub fn is_any_modifier(key: u8) bool {
 }
 
 pub fn generate_valid_key(random: *std.Random) u8 {
-    std.debug.assert(@intFromPtr(random) != 0);
-
     var attempts: u8 = 0;
     var result = random.intRangeAtMost(u8, keycode.value_min, keycode.value_max);
 
@@ -354,7 +341,6 @@ pub fn generate_valid_key(random: *std.Random) u8 {
 }
 
 pub fn generate_operation(random: *std.Random, model: *const Model) Operation {
-    std.debug.assert(@intFromPtr(random) != 0);
     std.debug.assert(model.is_valid());
 
     const op_type = random.intRangeLessThan(u8, 0, 100);
@@ -377,8 +363,6 @@ pub fn generate_operation(random: *std.Random, model: *const Model) Operation {
 }
 
 fn generate_keydown_operation(random: *std.Random) Operation {
-    std.debug.assert(@intFromPtr(random) != 0);
-
     const key = generate_valid_key(random);
 
     std.debug.assert(!is_generic_modifier(key));
@@ -392,8 +376,6 @@ fn generate_keydown_operation(random: *std.Random) Operation {
 }
 
 fn generate_keyup_operation(random: *std.Random) Operation {
-    std.debug.assert(@intFromPtr(random) != 0);
-
     const key = generate_valid_key(random);
 
     std.debug.assert(!is_generic_modifier(key));
@@ -569,8 +551,6 @@ test "generate_valid_key excludes all modifiers" {
     var i: u32 = 0;
 
     while (i < 1000) : (i += 1) {
-        std.debug.assert(i < 1000);
-
         const key = generate_valid_key(&random);
 
         std.debug.assert(!is_any_modifier(key));
@@ -589,7 +569,6 @@ test "generate_operation produces valid operations" {
     var i: u32 = 0;
 
     while (i < 100) : (i += 1) {
-        std.debug.assert(i < 100);
         std.debug.assert(model.is_valid());
 
         const op = generate_operation(&random, &model);

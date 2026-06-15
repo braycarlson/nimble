@@ -9,8 +9,6 @@ pub const Field = struct {
     color: []const u8,
 
     pub fn is_valid(self: *const Field) bool {
-        std.debug.assert(@intFromPtr(self) != 0);
-
         const valid_id = self.id.len > 0;
         const valid_label = self.label.len > 0;
         const valid_color = self.color.len > 0;

@@ -11,8 +11,6 @@ pub const Next = struct {
     call: *const fn (context: *anyopaque, key: *const Key) Response,
 
     pub fn invoke(self: *const Next, key: *const Key) Response {
-        std.debug.assert(@intFromPtr(self.context) != 0);
-        std.debug.assert(@intFromPtr(self.call) != 0);
         std.debug.assert(key.is_valid());
 
         const result = self.call(self.context, key);
@@ -32,8 +30,6 @@ pub const Middleware = struct {
     };
 
     pub fn process(self: *const Middleware, key: *const Key, next: *const Next) Response {
-        std.debug.assert(@intFromPtr(self.pointer) != 0);
-        std.debug.assert(@intFromPtr(self.vtable) != 0);
         std.debug.assert(key.is_valid());
 
         const result = self.vtable.process(self.pointer, key, next);
@@ -44,11 +40,8 @@ pub const Middleware = struct {
     }
 
     pub fn from(comptime T: type, pointer: *T) Middleware {
-        std.debug.assert(@intFromPtr(pointer) != 0);
-
         const impl = struct {
             fn process(p: *anyopaque, k: *const Key, n: *const Next) Response {
-                std.debug.assert(@intFromPtr(p) != 0);
                 std.debug.assert(k.is_valid());
 
                 const context: *T = @ptrCast(@alignCast(p));
@@ -64,8 +57,6 @@ pub const Middleware = struct {
             .pointer = pointer,
             .vtable = &.{ .process = impl.process },
         };
-
-        std.debug.assert(@intFromPtr(result.pointer) != 0);
 
         return result;
     }
@@ -95,7 +86,6 @@ pub fn Pipeline(comptime capacity: u8) type {
 
         pub fn add(self: *Self, comptime T: type, pointer: *T) !u8 {
             std.debug.assert(self.count <= capacity);
-            std.debug.assert(@intFromPtr(pointer) != 0);
 
             if (self.count >= capacity) {
                 return error.PipelineFull;
@@ -127,8 +117,6 @@ pub fn Pipeline(comptime capacity: u8) type {
             var i: u8 = 0;
 
             while (i < capacity) : (i += 1) {
-                std.debug.assert(i < capacity);
-
                 if (index >= self.count - 1) {
                     break;
                 }
@@ -153,37 +141,37 @@ pub fn Pipeline(comptime capacity: u8) type {
         fn process_at(self: *Self, index: u8, key: *const Key, final: *const fn (key: *const Key) Response) Response {
             std.debug.assert(self.count <= capacity);
             std.debug.assert(key.is_valid());
+            std.debug.assert(index <= self.count);
 
-            if (index >= self.count) {
-                return final(key);
+            var i: u8 = index;
+
+            while (i < self.count) : (i += 1) {
+                std.debug.assert(i < capacity);
+
+                if (self.items[i]) |middleware| {
+                    var chain = ChainContext{
+                        .pipeline = self,
+                        .index = i + 1,
+                        .final = final,
+                    };
+
+                    const next = Next{
+                        .context = &chain,
+                        .call = chain_call,
+                    };
+
+                    const result = middleware.process(key, &next);
+
+                    std.debug.assert(result.is_valid());
+
+                    return result;
+                }
             }
 
-            std.debug.assert(index < self.count);
-
-            if (self.items[index]) |middleware| {
-                var chain = ChainContext{
-                    .pipeline = self,
-                    .index = index + 1,
-                    .final = final,
-                };
-
-                const next = Next{
-                    .context = &chain,
-                    .call = chain_call,
-                };
-
-                const result = middleware.process(key, &next);
-
-                std.debug.assert(result.is_valid());
-
-                return result;
-            }
-
-            return self.process_at(index + 1, key, final);
+            return final(key);
         }
 
         fn chain_call(context: *anyopaque, key: *const Key) Response {
-            std.debug.assert(@intFromPtr(context) != 0);
             std.debug.assert(key.is_valid());
 
             const chain: *ChainContext = @ptrCast(@alignCast(context));
@@ -201,8 +189,6 @@ pub fn Pipeline(comptime capacity: u8) type {
             var i: u8 = 0;
 
             while (i < capacity) : (i += 1) {
-                std.debug.assert(i < capacity);
-
                 self.items[i] = null;
             }
 

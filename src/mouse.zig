@@ -130,10 +130,16 @@ pub fn MouseHook(comptime config: Config) type {
         }
 
         pub fn scroll_up(_: *Self, clicks: u32) bool {
+            std.debug.assert(clicks >= 1);
+            std.debug.assert(clicks <= simulate_mouse.scroll_clicks_max);
+
             return simulate_mouse.scroll_up(clicks);
         }
 
         pub fn scroll_down(_: *Self, clicks: u32) bool {
+            std.debug.assert(clicks >= 1);
+            std.debug.assert(clicks <= simulate_mouse.scroll_clicks_max);
+
             return simulate_mouse.scroll_down(clicks);
         }
 
@@ -248,7 +254,12 @@ pub fn MouseHook(comptime config: Config) type {
                 return error.HookInstallFailed;
             }
 
+            std.debug.assert(self.hook_handle != null);
+            std.debug.assert(self.module_handle != null);
+
             self.running.store(true, .release);
+
+            std.debug.assert(self.running.load(.acquire));
         }
 
         pub fn stop(self: *Self) void {
@@ -269,6 +280,8 @@ pub fn MouseHook(comptime config: Config) type {
 
             instance_global.store(null, .release);
             proc_global.store(null, .release);
+
+            std.debug.assert(self.hook_handle == null);
         }
 
         pub fn is_running(self: *Self) bool {
@@ -292,6 +305,8 @@ pub fn MouseHook(comptime config: Config) type {
                 return primitive.next(code_hook, wparam, lparam);
             }
 
+            std.debug.assert(code_hook >= 0);
+
             const parsed = Mouse.parse(wparam, lparam) orelse {
                 return primitive.next(code_hook, wparam, lparam);
             };
@@ -301,6 +316,8 @@ pub fn MouseHook(comptime config: Config) type {
             if (instance == null) {
                 return primitive.next(code_hook, wparam, lparam);
             }
+
+            std.debug.assert(instance != null);
 
             const self = instance.?;
 
