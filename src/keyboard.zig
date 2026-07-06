@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const w32 = @import("win32").everything;
+const win32 = @import("win32").everything;
 const Mutex = @import("mutex.zig").Mutex;
 
 const primitive = @import("hook.zig");
@@ -30,6 +30,7 @@ const KeyboardState = state.Keyboard;
 pub const keycode_silent: u8 = keycode.silent;
 
 pub const Error = error{
+    HookAlreadyInstalled,
     HookInstallFailed,
 };
 
@@ -60,7 +61,7 @@ pub fn KeyboardHook(comptime config: Config) type {
     return struct {
         const Self = @This();
 
-        var instance: ?*Self = null;
+        var instance: std.atomic.Value(?*Self) = std.atomic.Value(?*Self).init(null);
 
         const Registry = key_registry.KeyRegistry(capacity);
         const ChordRegistry = chord_registry.ChordRegistry(capacity_chord);
@@ -84,7 +85,7 @@ pub fn KeyboardHook(comptime config: Config) type {
         running: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
         mutex: Mutex = .{},
         hook_handle: ?primitive.Hook = null,
-        module_handle: ?w32.HINSTANCE = null,
+        module_handle: ?win32.HINSTANCE = null,
         key_callback: ?KeyCallback = null,
         key_context: ?*anyopaque = null,
 
@@ -96,7 +97,6 @@ pub fn KeyboardHook(comptime config: Config) type {
             self.stop();
             self.repeat_registry.stop_all();
             self.macro_registry.stop();
-            self.timer_registry.clear_global();
             self.registry.clear();
             self.chord_registry.clear();
             self.command_registry.clear();
@@ -108,11 +108,17 @@ pub fn KeyboardHook(comptime config: Config) type {
         }
 
         pub fn set_key_callback(self: *Self, callback: KeyCallback, context: *anyopaque) void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
             self.key_callback = callback;
             self.key_context = context;
         }
 
         pub fn clear_key_callback(self: *Self) void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
             self.key_callback = null;
             self.key_context = null;
         }
@@ -131,21 +137,24 @@ pub fn KeyboardHook(comptime config: Config) type {
                 return error.HookInstallFailed;
             }
 
-            self.timer_registry.set_global();
-            self.blocked.store(false, .seq_cst);
+            if (instance.cmpxchgStrong(null, self, .seq_cst, .seq_cst) != null) {
+                return error.HookAlreadyInstalled;
+            }
 
-            instance = self;
+            self.blocked.store(false, .seq_cst);
 
             self.hook_handle = primitive.Hook.install(.keyboard, hook_callback, self.module_handle.?);
 
             if (self.hook_handle == null) {
-                instance = null;
+                instance.store(null, .seq_cst);
+
                 return error.HookInstallFailed;
             }
 
             std.debug.assert(self.hook_handle != null);
             std.debug.assert(self.module_handle != null);
 
+            self.timer_registry.set_global();
             self.running.store(true, .seq_cst);
 
             std.debug.assert(self.running.load(.seq_cst));
@@ -153,24 +162,25 @@ pub fn KeyboardHook(comptime config: Config) type {
 
         pub fn stop(self: *Self) void {
             self.mutex.lock();
+            defer self.mutex.unlock();
 
             if (!self.running.load(.seq_cst)) {
-                self.mutex.unlock();
                 return;
             }
 
             self.running.store(false, .seq_cst);
-            self.mutex.unlock();
+            instance.store(null, .seq_cst);
 
             if (self.hook_handle) |h| {
                 _ = h.remove();
                 self.hook_handle = null;
             }
 
-            instance = null;
+            self.timer_registry.clear_global();
             self.blocked.store(false, .seq_cst);
 
             std.debug.assert(self.hook_handle == null);
+            std.debug.assert(instance.load(.seq_cst) != self);
         }
 
         pub fn is_running(self: *Self) bool {
@@ -193,7 +203,7 @@ pub fn KeyboardHook(comptime config: Config) type {
             const was_blocked = self.blocked.load(.seq_cst);
             self.blocked.store(value, .seq_cst);
 
-            if (was_blocked and !value) {
+            if (was_blocked != value) {
                 self.release_modifier();
             }
         }
@@ -205,6 +215,8 @@ pub fn KeyboardHook(comptime config: Config) type {
                 keycode.lshift, keycode.rshift,
                 keycode.lwin,   keycode.rwin,
             };
+
+            _ = simulate_key.dummy();
 
             for (keys) |key| {
                 _ = simulate_key.key_up(key);
@@ -232,7 +244,7 @@ pub fn KeyboardHook(comptime config: Config) type {
         }
 
         pub fn timer(self: *Self, interval_ms: u32) builder.TimerBuilder(Self.TimerRegistry) {
-            return builder.TimerBuilder(Self.TimerRegistry).init(&self.timer_registry, interval_ms);
+            return builder.TimerBuilder(Self.TimerRegistry).every(&self.timer_registry, interval_ms);
         }
 
         pub fn macro_builder(self: *Self, comptime name: []const u8) builder.MacroBuilder(Self) {
@@ -279,22 +291,22 @@ pub fn KeyboardHook(comptime config: Config) type {
             return clipboard_mod.Clipboard.init();
         }
 
-        pub fn get_modifiers(self: *Self) *modifier.Set {
+        pub fn get_modifiers(self: *Self) modifier.Set {
             return self.keyboard.get_modifiers();
         }
 
         fn hook_callback(
             code: c_int,
-            wparam: w32.WPARAM,
-            lparam: w32.LPARAM,
-        ) callconv(.c) w32.LRESULT {
+            wparam: win32.WPARAM,
+            lparam: win32.LPARAM,
+        ) callconv(.c) win32.LRESULT {
             if (code < 0) {
                 return primitive.next(code, wparam, lparam);
             }
 
             std.debug.assert(code >= 0);
 
-            const self = instance orelse return primitive.next(code, wparam, lparam);
+            const self = instance.load(.seq_cst) orelse return primitive.next(code, wparam, lparam);
 
             const parsed = Key.parse(wparam, lparam) orelse {
                 return primitive.next(code, wparam, lparam);
@@ -316,8 +328,15 @@ pub fn KeyboardHook(comptime config: Config) type {
 
             const key = parsed.with_modifiers(self.keyboard.get_modifiers());
 
-            if (self.key_callback) |callback| {
-                if (self.key_context) |context| {
+            self.mutex.lock();
+
+            const callback_snapshot = self.key_callback;
+            const context_snapshot = self.key_context;
+
+            self.mutex.unlock();
+
+            if (callback_snapshot) |callback| {
+                if (context_snapshot) |context| {
                     if (callback(context, parsed.value, parsed.down, parsed.extra)) |result| {
                         if (result == 0) {
                             return 1;
@@ -335,27 +354,17 @@ pub fn KeyboardHook(comptime config: Config) type {
             const currently_blocked = self.blocked.load(.seq_cst);
 
             if (currently_blocked) {
-                if (!parsed.down) {
-                    if (self.registry.process_blocked(&key)) |response| {
-                        if (response == .consume) {
-                            return 1;
-                        }
-                    }
-
-                    return 1;
+                if (parsed.extra == simulate_key.marker_injected) {
+                    return primitive.next(code, wparam, lparam);
                 }
 
-                if (self.registry.process_blocked(&key)) |response| {
-                    if (response == .consume) {
-                        return 1;
-                    }
-                }
+                _ = self.registry.process_blocked(&key);
 
                 return 1;
             }
 
             if (parsed.down) {
-                const now_ms: i64 = @intCast(w32.GetTickCount64());
+                const now_ms: i64 = @intCast(win32.GetTickCount64());
 
                 const chord_response = self.chord_registry.process(&key, now_ms);
 

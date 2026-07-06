@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const w32 = @import("win32").everything;
+const win32 = @import("win32").everything;
 
 const keycode = @import("../keycode.zig");
 const modifier = @import("../modifier.zig");
@@ -33,7 +33,7 @@ pub const Input = extern struct {
         std.debug.assert(value <= keycode.value_max or value == keycode.value_dummy);
         std.debug.assert(flag <= (flag_extended | flag_keyup));
 
-        const scan: u16 = @truncate(w32.MapVirtualKeyW(value, 0));
+        const scan: u16 = @truncate(win32.MapVirtualKeyW(value, 0));
 
         const result = Input{
             .type = type_keyboard,
@@ -291,7 +291,7 @@ pub fn send(input: []Input) u32 {
     std.debug.assert(count >= 1);
     std.debug.assert(count <= capacity_input);
 
-    const result = w32.SendInput(count, @ptrCast(input.ptr), size);
+    const result = win32.SendInput(count, @ptrCast(input.ptr), size);
 
     std.debug.assert(result <= count);
 

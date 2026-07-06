@@ -1,11 +1,11 @@
 const std = @import("std");
 const input = @import("input");
 
-const base_mod = input.registry.base;
+const base = input.registry.base;
 
-const BaseRegistry = base_mod.BaseRegistry;
-const BaseError = base_mod.BaseError;
-const Options = base_mod.Options;
+const BaseRegistry = base.BaseRegistry;
+const BaseError = base.BaseError;
+const Options = base.Options;
 
 const testing = std.testing;
 

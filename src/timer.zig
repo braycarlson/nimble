@@ -1,7 +1,8 @@
 const std = @import("std");
 
-const w32 = @import("win32").everything;
+const win32 = @import("win32").everything;
 
+const Mutex = @import("mutex.zig").Mutex;
 const slot_mod = @import("registry/slot.zig");
 
 pub const capacity_default: u8 = 16;
@@ -67,8 +68,15 @@ pub fn TimerRegistry(comptime capacity: u8) type {
 
         const Slot = slot_mod.SlotManager(Entry, capacity);
 
+        const Invocation = struct {
+            callback: Callback,
+            context: *anyopaque,
+            id: u32,
+        };
+
         slot: Slot = Slot.init(),
         enabled: bool = true,
+        mutex: Mutex = .{},
 
         pub fn init() Self {
             return Self{};
@@ -85,11 +93,14 @@ pub fn TimerRegistry(comptime capacity: u8) type {
             context: ?*anyopaque,
             repeat_timer: bool,
         ) Error!u32 {
-            std.debug.assert(self.is_valid());
-
             if (interval_ms < interval_min_ms or interval_ms > interval_max_ms) {
                 return Error.InvalidValue;
             }
+
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            std.debug.assert(self.is_valid());
 
             const allocation = self.slot.allocate() orelse return error.RegistryFull;
 
@@ -114,15 +125,23 @@ pub fn TimerRegistry(comptime capacity: u8) type {
         }
 
         pub fn unregister(self: *Self, id: u32) Error!void {
-            std.debug.assert(self.is_valid());
             std.debug.assert(id >= 1);
+
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            std.debug.assert(self.is_valid());
 
             _ = self.slot.free_by_id(id) orelse return error.NotFound;
         }
 
         pub fn start(self: *Self, id: u32) Error!void {
-            std.debug.assert(self.is_valid());
             std.debug.assert(id >= 1);
+
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            std.debug.assert(self.is_valid());
 
             const entry = self.slot.get_by_id(id) orelse return error.NotFound;
 
@@ -132,12 +151,16 @@ pub fn TimerRegistry(comptime capacity: u8) type {
 
             entry.running = true;
             entry.fired = false;
-            entry.last_tick = @intCast(w32.GetTickCount64());
+            entry.last_tick = @intCast(win32.GetTickCount64());
         }
 
         pub fn stop(self: *Self, id: u32) Error!void {
-            std.debug.assert(self.is_valid());
             std.debug.assert(id >= 1);
+
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            std.debug.assert(self.is_valid());
 
             const entry = self.slot.get_by_id(id) orelse return error.NotFound;
 
@@ -149,14 +172,20 @@ pub fn TimerRegistry(comptime capacity: u8) type {
         }
 
         pub fn tick(self: *Self) u8 {
+            var invocations: [capacity]Invocation = undefined;
+            var invocation_count: u8 = 0;
+
+            self.mutex.lock();
+
             std.debug.assert(self.is_valid());
 
             if (!self.enabled) {
+                self.mutex.unlock();
+
                 return 0;
             }
 
-            const now: i64 = @intCast(w32.GetTickCount64());
-            var fired: u8 = 0;
+            const now: i64 = @intCast(win32.GetTickCount64());
 
             var i: u32 = 0;
 
@@ -171,25 +200,51 @@ pub fn TimerRegistry(comptime capacity: u8) type {
                     continue;
                 }
 
-                const should_fire = self.check_elapsed(entry, now);
+                const should_fire = check_elapsed(entry, now);
 
                 if (should_fire) {
                     entry.last_tick = now;
                     entry.fired = true;
 
-                    if (fired < fired_max) {
-                        fired += 1;
+                    if (!entry.repeat) {
+                        entry.running = false;
                     }
 
-                    self.invoke_callback(entry);
+                    if (entry.callback) |callback| {
+                        if (entry.context) |context| {
+                            std.debug.assert(invocation_count < capacity);
+
+                            invocations[invocation_count] = Invocation{
+                                .callback = callback,
+                                .context = context,
+                                .id = entry.id,
+                            };
+
+                            invocation_count += 1;
+                        }
+                    }
                 }
             }
 
-            return fired;
+            self.mutex.unlock();
+
+            std.debug.assert(invocation_count <= capacity);
+            std.debug.assert(invocation_count <= fired_max);
+
+            var index: u8 = 0;
+
+            while (index < invocation_count) : (index += 1) {
+                const invocation = invocations[index];
+
+                invocation.callback(invocation.context, invocation.id);
+            }
+
+            return invocation_count;
         }
 
-        fn check_elapsed(self: *const Self, entry: *const Entry, now: i64) bool {
-            _ = self;
+        fn check_elapsed(entry: *const Entry, now: i64) bool {
+            std.debug.assert(entry.active);
+            std.debug.assert(entry.running);
 
             if (entry.last_tick == 0) {
                 return false;
@@ -204,19 +259,13 @@ pub fn TimerRegistry(comptime capacity: u8) type {
             return elapsed >= entry.interval_ms;
         }
 
-        fn invoke_callback(self: *Self, entry: *Entry) void {
-            _ = self;
-
-            if (entry.callback) |callback| {
-                const context = entry.context orelse return;
-
-                callback(context, entry.id);
-            }
-        }
-
-        pub fn get_remaining(self: *const Self, id: u32) ?u32 {
-            std.debug.assert(self.is_valid());
+        pub fn get_remaining(self: *Self, id: u32) ?u32 {
             std.debug.assert(id >= 1);
+
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            std.debug.assert(self.is_valid());
 
             const slot = self.slot.find_by_id(id) orelse return null;
 
@@ -228,7 +277,7 @@ pub fn TimerRegistry(comptime capacity: u8) type {
                 return null;
             }
 
-            const now: i64 = @intCast(w32.GetTickCount64());
+            const now: i64 = @intCast(win32.GetTickCount64());
 
             if (now < entry.last_tick) {
                 return entry.interval_ms;
@@ -245,9 +294,13 @@ pub fn TimerRegistry(comptime capacity: u8) type {
             return @intCast(remaining);
         }
 
-        pub fn is_running(self: *const Self, id: u32) ?bool {
-            std.debug.assert(self.is_valid());
+        pub fn is_running(self: *Self, id: u32) ?bool {
             std.debug.assert(id >= 1);
+
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            std.debug.assert(self.is_valid());
 
             const slot = self.slot.find_by_id(id) orelse return null;
 
@@ -257,10 +310,16 @@ pub fn TimerRegistry(comptime capacity: u8) type {
         }
 
         pub fn set_enabled(self: *Self, value: bool) void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
             self.enabled = value;
         }
 
         pub fn clear(self: *Self) void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
             std.debug.assert(self.is_valid());
 
             self.slot.clear();

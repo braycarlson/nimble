@@ -156,3 +156,29 @@ test "macro constants" {
     try testing.expect(macro_mod.delay_max_ms >= macro_mod.delay_default_ms);
     try testing.expect(macro_mod.repeat_max >= 1);
 }
+
+test "MacroRegistry: play_by_name returns false for unknown name" {
+    var registry = macro_mod.MacroRegistry(4).init();
+
+    try testing.expect(!registry.play_by_name("missing"));
+}
+
+test "MacroRegistry: play_by_name returns false for invalid name length" {
+    var registry = macro_mod.MacroRegistry(4).init();
+
+    const name_long = "a" ** (macro_mod.name_max + 1);
+
+    try testing.expect(!registry.play_by_name(""));
+    try testing.expect(!registry.play_by_name(name_long));
+}
+
+test "MacroRegistry: find_by_name locates created macro" {
+    var registry = macro_mod.MacroRegistry(4).init();
+
+    const id = try registry.create("copy_all");
+
+    const found = registry.find_by_name("copy_all") orelse unreachable;
+
+    try testing.expectEqual(id, found.get_id());
+    try testing.expect(registry.find_by_name("other") == null);
+}

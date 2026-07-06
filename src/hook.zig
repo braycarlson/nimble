@@ -1,8 +1,8 @@
 const std = @import("std");
 
-const w32 = @import("win32").everything;
+const win32 = @import("win32").everything;
 
-pub const Callback = *const fn (c_int, w32.WPARAM, w32.LPARAM) callconv(.c) w32.LRESULT;
+pub const Callback = *const fn (c_int, win32.WPARAM, win32.LPARAM) callconv(.c) win32.LRESULT;
 
 pub const kind_max: u8 = 1;
 pub const kind_count: u8 = 2;
@@ -22,13 +22,12 @@ pub const Kind = enum(u8) {
         return result;
     }
 
-    pub fn to_id(self: Kind) w32.WINDOWS_HOOK_ID {
+    pub fn to_id(self: Kind) win32.WINDOWS_HOOK_ID {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromEnum(self) <= kind_max);
 
         const result = switch (self) {
-            .keyboard => w32.WH_KEYBOARD_LL,
-            .mouse => w32.WH_MOUSE_LL,
+            .keyboard => win32.WH_KEYBOARD_LL,
+            .mouse => win32.WH_MOUSE_LL,
         };
 
         return result;
@@ -36,14 +35,14 @@ pub const Kind = enum(u8) {
 };
 
 pub const Hook = struct {
-    handle: w32.HHOOK,
+    handle: win32.HHOOK,
     kind: Kind,
 
-    pub fn install(kind: Kind, callback: Callback, instance: w32.HINSTANCE) ?Hook {
+    pub fn install(kind: Kind, callback: Callback, instance: win32.HINSTANCE) ?Hook {
         std.debug.assert(kind.is_valid());
 
         const id = kind.to_id();
-        const handle = w32.SetWindowsHookExW(id, @ptrCast(callback), instance, 0);
+        const handle = win32.SetWindowsHookExW(id, @ptrCast(callback), instance, 0);
 
         if (handle == null) {
             return null;
@@ -71,21 +70,21 @@ pub const Hook = struct {
     pub fn remove(self: *const Hook) bool {
         std.debug.assert(self.is_valid());
 
-        const status = w32.UnhookWindowsHookEx(self.handle);
+        const status = win32.UnhookWindowsHookEx(self.handle);
         const result = status != 0;
 
         return result;
     }
 };
 
-pub fn module() ?w32.HINSTANCE {
-    const result = w32.GetModuleHandleW(null);
+pub fn module() ?win32.HINSTANCE {
+    const result = win32.GetModuleHandleW(null);
 
     return result;
 }
 
-pub fn next(code_hook: c_int, wparam: w32.WPARAM, lparam: w32.LPARAM) w32.LRESULT {
-    const result = w32.CallNextHookEx(null, code_hook, wparam, lparam);
+pub fn next(code_hook: c_int, wparam: win32.WPARAM, lparam: win32.LPARAM) win32.LRESULT {
+    const result = win32.CallNextHookEx(null, code_hook, wparam, lparam);
 
     return result;
 }

@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const w32 = @import("win32").everything;
+const win32 = @import("win32").everything;
 const Mutex = @import("../mutex.zig").Mutex;
 
 const keycode = @import("../keycode.zig");
@@ -329,12 +329,13 @@ pub const Macro = struct {
         }
 
         const text_len_max: u16 = 254;
-        const text_len_u16: u16 = if (text.len > text_len_max) text_len_max else @intCast(text.len);
-        const len_total: u16 = text_len_u16 + 1;
 
-        if (len_total > 255) {
+        if (text.len > text_len_max) {
             return Error.TextTooLong;
         }
+
+        const text_len_u16: u16 = @intCast(text.len);
+        const len_total: u16 = text_len_u16 + 1;
 
         if (self.text_len + len_total > text_buffer_max) {
             return Error.BufferFull;
@@ -400,7 +401,7 @@ pub fn MacroRegistry(comptime capacity: u8) type {
         recording_slot: ?u8 = null,
         record_start: i64 = 0,
 
-        playing: bool = false,
+        playing: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
         playing_slot: ?u8 = null,
         play_index: u16 = 0,
         play_repeat: u32 = 0,
@@ -498,20 +499,53 @@ pub fn MacroRegistry(comptime capacity: u8) type {
             self.mutex.lock();
             defer self.mutex.unlock();
 
-            if (self.playing) {
+            if (self.playing.load(.acquire)) {
                 return Error.AlreadyActive;
             }
 
+            if (self.play_thread) |thread| {
+                thread.join();
+                self.play_thread = null;
+            }
+
+            std.debug.assert(self.play_thread == null);
+
             const slot = self.slot.find_by_id(id) orelse return Error.NotFound;
 
-            self.playing = true;
+            self.playing.store(true, .release);
             self.playing_slot = @intCast(slot);
 
             self.play_thread = std.Thread.spawn(.{}, play_thread_fn, .{self}) catch {
-                self.playing = false;
+                self.playing.store(false, .release);
                 self.playing_slot = null;
                 return Error.NotActive;
             };
+        }
+
+        pub fn play_by_name(self: *Self, name: []const u8) bool {
+            std.debug.assert(self.is_valid());
+
+            if (name.len == 0 or name.len > name_max) {
+                return false;
+            }
+
+            self.mutex.lock();
+
+            const macro = self.find_by_name(name) orelse {
+                self.mutex.unlock();
+
+                return false;
+            };
+
+            const id = macro.get_id();
+
+            self.mutex.unlock();
+
+            std.debug.assert(id >= 1);
+
+            self.play(id) catch return false;
+
+            return true;
         }
 
         pub fn stop(self: *Self) void {
@@ -519,12 +553,7 @@ pub fn MacroRegistry(comptime capacity: u8) type {
 
             self.mutex.lock();
 
-            if (!self.playing) {
-                self.mutex.unlock();
-                return;
-            }
-
-            self.playing = false;
+            self.playing.store(false, .release);
 
             const thread = self.play_thread;
             self.play_thread = null;
@@ -537,37 +566,34 @@ pub fn MacroRegistry(comptime capacity: u8) type {
         }
 
         pub fn is_playing(self: *Self) bool {
-            self.mutex.lock();
-            defer self.mutex.unlock();
-
-            return self.playing;
+            return self.playing.load(.acquire);
         }
 
         fn play_thread_fn(self: *Self) void {
             self.mutex.lock();
 
             const slot = self.playing_slot orelse {
-                self.playing = false;
+                self.playing.store(false, .release);
                 self.playing_slot = null;
                 self.mutex.unlock();
                 return;
             };
 
-            const macro = &self.slot.entries[slot];
+            std.debug.assert(self.slot.entries[slot].is_valid());
 
-            std.debug.assert(macro.is_valid());
+            const macro = self.slot.entries[slot];
+
+            self.mutex.unlock();
 
             const repeats: u32 = if (macro.repeat_count == 0) 1 else macro.repeat_count;
             const delay_between = macro.delay_between_ms;
-
-            self.mutex.unlock();
 
             var r: u32 = 0;
 
             while (r < repeats) : (r += 1) {
                 self.mutex.lock();
 
-                if (!self.playing) {
+                if (!self.playing.load(.acquire)) {
                     self.playing_slot = null;
                     self.mutex.unlock();
                     return;
@@ -575,34 +601,40 @@ pub fn MacroRegistry(comptime capacity: u8) type {
 
                 self.mutex.unlock();
 
-                self.execute_macro(macro);
+                self.execute_macro(&macro);
+
+                if (!self.playing.load(.acquire)) {
+                    break;
+                }
 
                 if (delay_between > 0 and r < repeats - 1) {
-                    w32.Sleep(delay_between);
+                    win32.Sleep(delay_between);
                 }
             }
 
             self.mutex.lock();
-            self.playing = false;
+            self.playing.store(false, .release);
             self.playing_slot = null;
             self.mutex.unlock();
         }
 
         fn execute_macro(self: *Self, macro: *const Macro) void {
-            _ = self;
-
             std.debug.assert(macro.is_valid());
             std.debug.assert(macro.action_count <= action_max);
 
             const hwnd = window.get_focused();
 
             if (hwnd) |h| {
-                message.release_modifiers(h);
+                _ = message.release_modifiers(h);
             }
 
             var i: u16 = 0;
 
             while (i < macro.action_count) : (i += 1) {
+                if (!self.playing.load(.acquire)) {
+                    return;
+                }
+
                 std.debug.assert(i < action_max);
 
                 const action = &macro.actions[i];
@@ -629,13 +661,13 @@ pub fn MacroRegistry(comptime capacity: u8) type {
             self.slot.clear();
 
             std.debug.assert(!self.recording);
-            std.debug.assert(!self.playing);
+            std.debug.assert(!self.playing.load(.acquire));
             std.debug.assert(self.is_valid());
         }
     };
 }
 
-fn execute_action(action: *const Action, macro: *const Macro, hwnd: ?w32.HWND) void {
+fn execute_action(action: *const Action, macro: *const Macro, hwnd: ?win32.HWND) void {
     std.debug.assert(action.is_valid());
     std.debug.assert(macro.is_valid());
 
@@ -653,33 +685,33 @@ fn execute_action(action: *const Action, macro: *const Macro, hwnd: ?w32.HWND) v
     }
 }
 
-fn execute_key_down(action: *const Action, hwnd: ?w32.HWND) void {
+fn execute_key_down(action: *const Action, hwnd: ?win32.HWND) void {
     std.debug.assert(action.kind == .key_down);
 
     if (hwnd) |h| {
-        message.send_key(h, action.key, true);
+        _ = message.send_key(h, action.key, true);
     } else {
         _ = simulate_key.key_down(action.key);
     }
 }
 
-fn execute_key_up(action: *const Action, hwnd: ?w32.HWND) void {
+fn execute_key_up(action: *const Action, hwnd: ?win32.HWND) void {
     std.debug.assert(action.kind == .key_up);
 
     if (hwnd) |h| {
-        message.send_key(h, action.key, false);
+        _ = message.send_key(h, action.key, false);
     } else {
         _ = simulate_key.key_up(action.key);
     }
 }
 
-fn execute_key_press(action: *const Action, hwnd: ?w32.HWND) void {
+fn execute_key_press(action: *const Action, hwnd: ?win32.HWND) void {
     std.debug.assert(action.kind == .key_press);
 
     if (action.modifiers.any()) {
         _ = simulate_key.combination(&action.modifiers, action.key);
     } else if (hwnd) |h| {
-        message.send_key_press(h, action.key);
+        _ = message.send_key_press(h, action.key);
     } else {
         _ = simulate_key.press(action.key);
     }
@@ -731,11 +763,11 @@ fn execute_delay(action: *const Action) void {
     std.debug.assert(action.delay_ms <= delay_max_ms);
 
     if (action.delay_ms > 0) {
-        w32.Sleep(action.delay_ms);
+        win32.Sleep(action.delay_ms);
     }
 }
 
-fn execute_text(action: *const Action, macro: *const Macro, hwnd: ?w32.HWND) void {
+fn execute_text(action: *const Action, macro: *const Macro, hwnd: ?win32.HWND) void {
     std.debug.assert(action.kind == .text);
     std.debug.assert(action.text_start < text_buffer_max);
     std.debug.assert(action.text_start + @as(u16, action.text_len) <= macro.text_len);
@@ -749,18 +781,18 @@ fn execute_text(action: *const Action, macro: *const Macro, hwnd: ?w32.HWND) voi
     }
 }
 
-fn execute_text_via_message(text: []const u8, hwnd: w32.HWND) void {
+fn execute_text_via_message(text: []const u8, hwnd: win32.HWND) void {
     for (text) |char| {
         if (char == '\r') {
             continue;
         }
 
         if (char == '\n') {
-            message.send_key_press(hwnd, keycode.@"return");
+            _ = message.send_key_press(hwnd, keycode.@"return");
             continue;
         }
 
-        message.send_char(hwnd, char);
+        _ = message.send_char(hwnd, char);
     }
 }
 

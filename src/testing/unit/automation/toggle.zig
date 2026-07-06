@@ -237,6 +237,43 @@ test "Entry: get methods with context" {
     try std.testing.expect(entry.is_active());
 }
 
+test "ToggleRegistry: process_toggle flips enabled and counts" {
+    var registry = ToggleRegistry(8).init();
+    var ctx = TestContext{};
+
+    const id = try registry.register(1, 2, TestContext.action_callback, &ctx, Options{
+        .toggle_callback = TestContext.toggle_callback,
+    });
+
+    registry.process_toggle(2);
+
+    try std.testing.expect(registry.is_enabled(id).?);
+    try std.testing.expectEqual(@as(u32, 1), registry.get_toggle_count(id).?);
+    try std.testing.expect(ctx.toggle_invoked);
+    try std.testing.expect(ctx.enabled_state);
+
+    registry.process_toggle(2);
+
+    try std.testing.expect(!registry.is_enabled(id).?);
+    try std.testing.expectEqual(@as(u32, 2), registry.get_toggle_count(id).?);
+    try std.testing.expect(!ctx.enabled_state);
+}
+
+test "ToggleRegistry: toggle_count saturates at max" {
+    var registry = ToggleRegistry(8).init();
+    var ctx = TestContext{};
+
+    const id = try registry.register(1, 2, TestContext.action_callback, &ctx, Options{});
+
+    const slot = registry.base.find_by_id(id).?;
+    registry.base.slot.entries[slot].toggle_count = toggle.toggle_count_max;
+
+    registry.process_toggle(2);
+
+    try std.testing.expectEqual(toggle.toggle_count_max, registry.get_toggle_count(id).?);
+    try std.testing.expect(registry.is_valid());
+}
+
 test "constants: valid ranges" {
     try std.testing.expect(toggle.capacity_default >= 1);
     try std.testing.expect(toggle.capacity_max >= toggle.capacity_default);

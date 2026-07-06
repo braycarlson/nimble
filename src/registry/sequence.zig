@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const base_mod = @import("base.zig");
+const base = @import("base.zig");
 const entry_mod = @import("entry.zig");
 const filter_mod = @import("../filter.zig");
 
@@ -10,7 +10,7 @@ pub const length_max: u32 = 16;
 pub const capacity_default: u32 = 8;
 pub const capacity_max: u32 = 32;
 
-pub const Error = base_mod.BaseError || error{
+pub const Error = base.BaseError || error{
     SequenceEmpty,
     SequenceTooLong,
     InvalidCharacter,
@@ -21,6 +21,7 @@ pub const Callback = *const fn (context: *anyopaque) void;
 pub const Entry = struct {
     base: entry_mod.FilteredEntry(Callback, WindowFilter) = .{},
     pattern: [length_max]u8 = [_]u8{0} ** length_max,
+    failure: [length_max]u32 = [_]u32{0} ** length_max,
     length: u32 = 0,
     position: u32 = 0,
     block_exempt: bool = false,
@@ -70,6 +71,7 @@ pub const Entry = struct {
     pub fn push(self: *Entry, value: u8) bool {
         std.debug.assert(self.is_active());
         std.debug.assert(self.length > 0);
+        std.debug.assert(self.position < self.length);
 
         const upper = std.ascii.toUpper(value);
 
@@ -78,18 +80,26 @@ pub const Entry = struct {
             return false;
         }
 
-        if (upper == self.pattern[self.position]) {
-            self.position += 1;
+        var position = self.position;
 
-            if (self.position == self.length) {
-                self.position = 0;
-                return true;
-            }
-        } else if (upper == self.pattern[0]) {
-            self.position = 1;
-        } else {
-            self.position = 0;
+        while (position > 0 and upper != self.pattern[position]) {
+            std.debug.assert(position <= length_max);
+
+            position = self.failure[position - 1];
         }
+
+        if (upper == self.pattern[position]) {
+            position += 1;
+        }
+
+        self.position = position;
+
+        if (self.position == self.length) {
+            self.position = 0;
+            return true;
+        }
+
+        std.debug.assert(self.position < self.length);
 
         return false;
     }
@@ -104,6 +114,37 @@ pub const Options = struct {
     block_exempt: bool = false,
 };
 
+const Invocation = struct {
+    callback: Callback,
+    context: *anyopaque,
+};
+
+fn failure_compute(pattern: []const u8, failure: *[length_max]u32) void {
+    std.debug.assert(pattern.len >= 1);
+    std.debug.assert(pattern.len <= length_max);
+
+    failure[0] = 0;
+
+    var prefix_len: u32 = 0;
+    var i: u32 = 1;
+
+    while (i < pattern.len) : (i += 1) {
+        while (prefix_len > 0 and pattern[i] != pattern[prefix_len]) {
+            std.debug.assert(prefix_len <= length_max);
+
+            prefix_len = failure[prefix_len - 1];
+        }
+
+        if (pattern[i] == pattern[prefix_len]) {
+            prefix_len += 1;
+        }
+
+        failure[i] = prefix_len;
+
+        std.debug.assert(failure[i] <= i);
+    }
+}
+
 pub fn SequenceRegistry(comptime capacity: u32) type {
     if (capacity == 0) {
         @compileError("SequenceRegistry capacity must be at least 1");
@@ -116,7 +157,7 @@ pub fn SequenceRegistry(comptime capacity: u32) type {
     return struct {
         const Self = @This();
 
-        const Base = base_mod.BaseRegistry(Entry, capacity, .{
+        const Base = base.BaseRegistry(Entry, capacity, .{
             .has_mutex = true,
         });
 
@@ -137,8 +178,6 @@ pub fn SequenceRegistry(comptime capacity: u32) type {
             context: ?*anyopaque,
             options: Options,
         ) Error!u32 {
-            std.debug.assert(self.is_valid());
-
             if (pattern.len == 0) {
                 return error.SequenceEmpty;
             }
@@ -147,8 +186,18 @@ pub fn SequenceRegistry(comptime capacity: u32) type {
                 return error.SequenceTooLong;
             }
 
+            for (pattern) |char| {
+                const upper = std.ascii.toUpper(char);
+
+                if (upper < 'A' or upper > 'Z') {
+                    return error.InvalidCharacter;
+                }
+            }
+
             self.base.lock();
             defer self.base.unlock();
+
+            std.debug.assert(self.is_valid());
 
             const allocation = self.base.allocate_locked() catch return error.RegistryFull;
 
@@ -170,17 +219,14 @@ pub fn SequenceRegistry(comptime capacity: u32) type {
             };
 
             for (pattern, 0..) |char, i| {
-                const upper = std.ascii.toUpper(char);
-
-                if (upper < 'A' or upper > 'Z') {
-                    _ = self.base.free_locked(allocation.slot) catch return error.InvalidCharacter;
-                    return error.InvalidCharacter;
-                }
-
-                entry.pattern[i] = upper;
+                entry.pattern[i] = std.ascii.toUpper(char);
             }
 
+            failure_compute(entry.pattern[0..entry.length], &entry.failure);
+
             self.base.slot.entries[allocation.slot] = entry;
+
+            std.debug.assert(self.base.slot.entries[allocation.slot].is_valid());
 
             return allocation.id;
         }
@@ -192,29 +238,52 @@ pub fn SequenceRegistry(comptime capacity: u32) type {
         }
 
         pub fn process(self: *Self, value: u8, blocked: bool) bool {
-            self.base.lock();
-            defer self.base.unlock();
-
+            var invocations: [capacity]Invocation = undefined;
+            var invocation_count: u32 = 0;
             var matched = false;
-            const entries = self.base.entries();
 
-            for (entries) |*entry| {
-                if (!entry.is_active()) {
-                    continue;
-                }
+            {
+                self.base.lock();
+                defer self.base.unlock();
 
-                if (blocked and !entry.block_exempt) {
-                    continue;
-                }
+                std.debug.assert(self.is_valid());
 
-                if (!entry.matches_filter()) {
-                    continue;
-                }
+                const entries = self.base.entries();
 
-                if (entry.push(value)) {
-                    entry.invoke();
-                    matched = true;
+                for (entries) |*entry| {
+                    if (!entry.is_active()) {
+                        continue;
+                    }
+
+                    if (blocked and !entry.block_exempt) {
+                        continue;
+                    }
+
+                    if (!entry.matches_filter()) {
+                        continue;
+                    }
+
+                    if (entry.push(value)) {
+                        matched = true;
+
+                        const callback = entry.get_callback() orelse continue;
+                        const context = entry.get_context() orelse continue;
+
+                        std.debug.assert(invocation_count < capacity);
+
+                        invocations[invocation_count] = Invocation{
+                            .callback = callback,
+                            .context = context,
+                        };
+                        invocation_count += 1;
+                    }
                 }
+            }
+
+            std.debug.assert(invocation_count <= capacity);
+
+            for (invocations[0..invocation_count]) |inv| {
+                inv.callback(inv.context);
             }
 
             return matched;

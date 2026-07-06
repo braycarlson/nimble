@@ -2,11 +2,19 @@ const std = @import("std");
 const input = @import("input");
 
 const timed_mod = input.registry.timed;
+const key_event = input.event.key;
+const response_mod = input.response;
 
 const Mode = timed_mod.Mode;
 const Options = timed_mod.Options;
+const Key = key_event.Key;
+const Response = response_mod.Response;
 
 const testing = std.testing;
+
+fn timed_callback(_: *anyopaque, _: *const Key) Response {
+    return .consume;
+}
 
 test "Mode.is_valid duration" {
     try testing.expect(Mode.duration.is_valid());
@@ -72,4 +80,48 @@ test "timed constants" {
     try testing.expect(timed_mod.capacity_default <= timed_mod.capacity_max);
     try testing.expect(timed_mod.duration_max_ms > 0);
     try testing.expect(timed_mod.count_max > 0);
+}
+
+test "TimedRegistry: register accepts count_limit at count_max" {
+    var registry = timed_mod.TimedRegistry(4).init();
+    var context: u32 = 0;
+
+    const id = try registry.register(
+        1,
+        timed_callback,
+        &context,
+        Options.count(timed_mod.count_max),
+    );
+
+    try testing.expect(id >= 1);
+    try testing.expect(registry.is_valid());
+}
+
+test "TimedRegistry: register rejects count_limit above count_max" {
+    var registry = timed_mod.TimedRegistry(4).init();
+    var context: u32 = 0;
+
+    const result = registry.register(
+        1,
+        timed_callback,
+        &context,
+        Options.count(timed_mod.count_max + 1),
+    );
+
+    try testing.expectError(error.InvalidValue, result);
+    try testing.expect(registry.is_valid());
+}
+
+test "TimedRegistry: register rejects zero count_limit" {
+    var registry = timed_mod.TimedRegistry(4).init();
+    var context: u32 = 0;
+
+    const result = registry.register(
+        1,
+        timed_callback,
+        &context,
+        Options.count(0),
+    );
+
+    try testing.expectError(error.InvalidValue, result);
 }

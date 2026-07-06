@@ -22,7 +22,7 @@ pub const Response = enum(u8) {
     pub fn is_valid(self: Response) bool {
         const value = @intFromEnum(self);
 
-        comptime std.debug.assert(variant_count == 3);
+        comptime std.debug.assert(@typeInfo(Response).@"enum".fields.len == variant_count);
 
         const result = value <= value_max;
 
@@ -31,7 +31,6 @@ pub const Response = enum(u8) {
 
     pub fn should_block(self: Response) bool {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromEnum(self) <= value_max);
 
         const is_consume = self == .consume;
         const is_replace = self == .replace;

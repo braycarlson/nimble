@@ -2,13 +2,13 @@ const std = @import("std");
 
 const key_event = @import("../event/key.zig");
 const modifier = @import("../modifier.zig");
-const response_mod = @import("../response.zig");
+const response = @import("../response.zig");
 const filter_mod = @import("../filter.zig");
-const base_mod = @import("base.zig");
+const base = @import("base.zig");
 const entry_mod = @import("entry.zig");
 
 const Key = key_event.Key;
-const Response = response_mod.Response;
+const Response = response.Response;
 const WindowFilter = filter_mod.WindowFilter;
 
 pub const sequence_max: u32 = 8;
@@ -18,7 +18,7 @@ pub const timeout_default_ms: u32 = 1000;
 pub const timeout_min_ms: u32 = 100;
 pub const timeout_max_ms: u32 = 5000;
 
-pub const Error = base_mod.BaseError || error{
+pub const Error = base.BaseError || error{
     InvalidSequence,
     InvalidValue,
 };
@@ -146,7 +146,7 @@ pub fn ChordRegistry(comptime capacity: u32) type {
     return struct {
         const Self = @This();
 
-        const Base = base_mod.BaseRegistry(Entry, capacity, .{
+        const Base = base.BaseRegistry(Entry, capacity, .{
             .has_mutex = true,
         });
 
@@ -170,8 +170,6 @@ pub fn ChordRegistry(comptime capacity: u32) type {
             context: ?*anyopaque,
             options: Options,
         ) Error!u32 {
-            std.debug.assert(self.is_valid());
-
             if (sequence.len < 2 or sequence.len > sequence_max) {
                 return Error.InvalidSequence;
             }
@@ -180,8 +178,18 @@ pub fn ChordRegistry(comptime capacity: u32) type {
                 return Error.InvalidValue;
             }
 
+            for (sequence) |char| {
+                const upper = std.ascii.toUpper(char);
+
+                if (upper < 0x01 or upper > 0xFE) {
+                    return Error.InvalidSequence;
+                }
+            }
+
             self.base.lock();
             defer self.base.unlock();
+
+            std.debug.assert(self.is_valid());
 
             const allocation = self.base.allocate_locked() catch return Error.RegistryFull;
 
@@ -218,22 +226,24 @@ pub fn ChordRegistry(comptime capacity: u32) type {
         }
 
         pub fn unregister(self: *Self, id: u32) Error!void {
-            std.debug.assert(self.is_valid());
             std.debug.assert(id >= 1);
 
             self.base.lock();
             defer self.base.unlock();
 
+            std.debug.assert(self.is_valid());
+
             _ = self.base.free_by_id_locked(id) catch return error.NotFound;
         }
 
         pub fn process(self: *Self, key: *const Key, now_ms: i64) ?Response {
-            std.debug.assert(self.is_valid());
             std.debug.assert(key.is_valid());
 
             const invocation = blk: {
                 self.base.lock();
                 defer self.base.unlock();
+
+                std.debug.assert(self.is_valid());
 
                 if (!self.enabled) {
                     break :blk null;
@@ -287,6 +297,9 @@ pub fn ChordRegistry(comptime capacity: u32) type {
                             .context = context,
                         };
                     }
+                } else {
+                    self.progress[slot] = 0;
+                    self.timestamps[slot] = 0;
                 }
             }
 

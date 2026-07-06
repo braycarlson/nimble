@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const w32 = @import("win32").everything;
+const win32 = @import("win32").everything;
 
 const keycode = @import("keycode.zig");
 
@@ -52,7 +52,6 @@ pub const Kind = enum(u8) {
 
     pub fn to_keycode(self: Kind) u8 {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromEnum(self) <= kind_max);
 
         const result = switch (self) {
             .ctrl => keycode.lctrl,
@@ -69,7 +68,6 @@ pub const Kind = enum(u8) {
 
     pub fn to_flag(self: Kind) u4 {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromEnum(self) <= kind_max);
 
         const result: u4 = @as(u4, 1) << @intCast(@intFromEnum(self));
 
@@ -81,7 +79,6 @@ pub const Kind = enum(u8) {
 
     pub fn to_string(self: Kind) []const u8 {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromEnum(self) <= kind_max);
 
         const result = switch (self) {
             .ctrl => "Ctrl",
@@ -149,7 +146,7 @@ pub const Set = struct {
         std.debug.assert(value >= keycode.value_min);
         std.debug.assert(value <= keycode.value_max);
 
-        const state = w32.GetAsyncKeyState(@intCast(value));
+        const state = win32.GetAsyncKeyState(@intCast(value));
 
         return state < 0;
     }

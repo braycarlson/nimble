@@ -168,6 +168,36 @@ test "Binding.id same" {
     try testing.expectEqual(a.id(), b.id());
 }
 
+test "Binding.id packs modifiers above keycode" {
+    const low_ctrl = Binding.init(0x01, modifier.Set.from(.{ .ctrl = true }));
+    const space_plain = Binding.init(keycode.space, modifier.Set.from(.{}));
+
+    try testing.expect(low_ctrl.id() != space_plain.id());
+    try testing.expectEqual(@as(u32, 0x101), low_ctrl.id());
+    try testing.expectEqual(@as(u32, 0x20), space_plain.id());
+}
+
+test "Binding.id exhaustive uniqueness for one key" {
+    const value: u8 = 'A';
+
+    var seen = [_]bool{false} ** 0x1000;
+    var flags: u8 = 0;
+
+    while (flags <= 0xF) : (flags += 1) {
+        const b = Binding{
+            .value = value,
+            .modifiers = .{ .flags = @intCast(flags) },
+        };
+
+        const packed_id = b.id();
+
+        try testing.expect(packed_id < seen.len);
+        try testing.expect(!seen[packed_id]);
+
+        seen[packed_id] = true;
+    }
+}
+
 test "Binding.id unique for all single modifiers" {
     const none = Binding.init('A', modifier.Set.from(.{}));
     const ctrl = Binding.init('A', modifier.Set.from(.{ .ctrl = true }));

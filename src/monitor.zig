@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const w32 = @import("win32").everything;
+const win32 = @import("win32").everything;
 
 pub const max: u8 = 16;
 
@@ -14,7 +14,7 @@ pub const Monitor = struct {
     work_right: i32,
     work_bottom: i32,
     primary: bool,
-    handle: w32.HMONITOR,
+    handle: win32.HMONITOR,
 
     pub fn width(self: *const Monitor) i32 {
         std.debug.assert(self.right >= self.left);
@@ -160,12 +160,12 @@ pub const Screen = struct {
 
     pub fn get() Screen {
         const result = Screen{
-            .width = w32.GetSystemMetrics(w32.SM_CXSCREEN),
-            .height = w32.GetSystemMetrics(w32.SM_CYSCREEN),
-            .virtual_width = w32.GetSystemMetrics(w32.SM_CXVIRTUALSCREEN),
-            .virtual_height = w32.GetSystemMetrics(w32.SM_CYVIRTUALSCREEN),
-            .virtual_left = w32.GetSystemMetrics(w32.SM_XVIRTUALSCREEN),
-            .virtual_top = w32.GetSystemMetrics(w32.SM_YVIRTUALSCREEN),
+            .width = win32.GetSystemMetrics(win32.SM_CXSCREEN),
+            .height = win32.GetSystemMetrics(win32.SM_CYSCREEN),
+            .virtual_width = win32.GetSystemMetrics(win32.SM_CXVIRTUALSCREEN),
+            .virtual_height = win32.GetSystemMetrics(win32.SM_CYVIRTUALSCREEN),
+            .virtual_left = win32.GetSystemMetrics(win32.SM_XVIRTUALSCREEN),
+            .virtual_top = win32.GetSystemMetrics(win32.SM_YVIRTUALSCREEN),
         };
 
         std.debug.assert(result.width >= 0);
@@ -209,7 +209,7 @@ pub const List = struct {
     pub fn enumerate() List {
         var result = List{};
 
-        _ = w32.EnumDisplayMonitors(null, null, enum_callback, @bitCast(@intFromPtr(&result)));
+        _ = win32.EnumDisplayMonitors(null, null, enum_callback, @bitCast(@intFromPtr(&result)));
 
         std.debug.assert(result.count <= max);
 
@@ -217,12 +217,12 @@ pub const List = struct {
     }
 
     fn enum_callback(
-        hmonitor: ?w32.HMONITOR,
-        _: ?w32.HDC,
-        _: ?*w32.RECT,
-        lparam: w32.LPARAM,
-    ) callconv(.c) w32.BOOL {
-        const list: *List = @ptrFromInt(@as(usize, @intCast(lparam)));
+        hmonitor: ?win32.HMONITOR,
+        _: ?win32.HDC,
+        _: ?*win32.RECT,
+        lparam: win32.LPARAM,
+    ) callconv(.c) win32.BOOL {
+        const list: *List = @ptrFromInt(@as(usize, @bitCast(lparam)));
 
         if (list.count >= max) {
             return 0;
@@ -230,10 +230,10 @@ pub const List = struct {
 
         const monitor = hmonitor orelse return 1;
 
-        var info: w32.MONITORINFO = std.mem.zeroes(w32.MONITORINFO);
-        info.cbSize = @sizeOf(w32.MONITORINFO);
+        var info: win32.MONITORINFO = std.mem.zeroes(win32.MONITORINFO);
+        info.cbSize = @sizeOf(win32.MONITORINFO);
 
-        if (w32.GetMonitorInfoW(monitor, &info) == 0) {
+        if (win32.GetMonitorInfoW(monitor, &info) == 0) {
             return 1;
         }
 
@@ -248,7 +248,7 @@ pub const List = struct {
             .work_top = info.rcWork.top,
             .work_right = info.rcWork.right,
             .work_bottom = info.rcWork.bottom,
-            .primary = (info.dwFlags & w32.MONITORINFOF_PRIMARY) != 0,
+            .primary = (info.dwFlags & win32.MONITORINFOF_PRIMARY) != 0,
             .handle = monitor,
         };
 
@@ -307,9 +307,9 @@ pub const List = struct {
 };
 
 pub fn get_cursor_position() Position {
-    var point: w32.POINT = std.mem.zeroes(w32.POINT);
+    var point: win32.POINT = std.mem.zeroes(win32.POINT);
 
-    if (w32.GetCursorPos(&point) == 0) {
+    if (win32.GetCursorPos(&point) == 0) {
         return Position.zero();
     }
 

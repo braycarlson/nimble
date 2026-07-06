@@ -1,14 +1,14 @@
 const std = @import("std");
 
-const w32 = @import("win32").everything;
+const win32 = @import("win32").everything;
 
 const key_event = @import("../event/key.zig");
-const response_mod = @import("../response.zig");
-const base_mod = @import("../registry/base.zig");
+const response = @import("../response.zig");
+const base = @import("../registry/base.zig");
 const entry_mod = @import("../registry/entry.zig");
 
 const Key = key_event.Key;
-const Response = response_mod.Response;
+const Response = response.Response;
 
 pub const capacity_default: u32 = 16;
 pub const capacity_max: u32 = 64;
@@ -18,7 +18,7 @@ pub const initial_delay_default_ms: u32 = 0;
 pub const initial_delay_max_ms: u32 = 60000;
 pub const count_max: u32 = 1000000;
 
-pub const Error = base_mod.BaseError || error{
+pub const Error = base.BaseError || error{
     AlreadyActive,
     InvalidValue,
 };
@@ -78,6 +78,14 @@ pub const Options = struct {
     initial_delay_ms: u32 = 0,
 };
 
+const ThreadContext = struct {
+    callback: ?Callback,
+    context: ?*anyopaque,
+    interval_ms: u32,
+    initial_delay_ms: u32,
+    stop_flag: *std.atomic.Value(bool),
+};
+
 pub fn RepeatRegistry(comptime capacity: u32) type {
     if (capacity == 0) {
         @compileError("RepeatRegistry capacity must be at least 1");
@@ -90,7 +98,7 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
     return struct {
         const Self = @This();
 
-        const Base = base_mod.BaseRegistry(Entry, capacity, .{
+        const Base = base.BaseRegistry(Entry, capacity, .{
             .has_mutex = true,
         });
 
@@ -166,22 +174,26 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
 
                 std.debug.assert(self.is_valid());
 
-                if (self.base.get_by_id(id)) |entry| {
-                    thread_to_join = self.stop_entry(entry);
-                }
+                const entry = self.base.get_by_id(id) orelse return error.NotFound;
 
-                _ = self.base.free_by_id_locked(id) catch return error.NotFound;
+                thread_to_join = self.stop_entry(entry);
             }
 
             if (thread_to_join) |t| {
                 t.join();
             }
+
+            self.base.lock();
+            defer self.base.unlock();
+
+            _ = self.base.free_by_id_locked(id) catch return error.NotFound;
         }
 
         pub fn process(self: *Self, binding_id: u32, down: bool) void {
             std.debug.assert(binding_id >= 1);
 
-            var thread_to_join: ?std.Thread = null;
+            var threads_to_join: [capacity]?std.Thread = [_]?std.Thread{null} ** capacity;
+            var thread_count: u32 = 0;
 
             {
                 self.base.lock();
@@ -191,7 +203,7 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
 
                 const entries = self.base.entries();
 
-                for (entries, 0..) |*e, slot| {
+                for (entries) |*e| {
                     if (!e.is_active()) {
                         continue;
                     }
@@ -201,15 +213,24 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
                     }
 
                     if (down) {
-                        self.start_entry(e, @intCast(slot));
+                        self.start_entry(e);
                     } else {
-                        thread_to_join = self.stop_entry(e);
+                        if (self.stop_entry(e)) |t| {
+                            std.debug.assert(thread_count < capacity);
+
+                            threads_to_join[thread_count] = t;
+                            thread_count += 1;
+                        }
                     }
                 }
             }
 
-            if (thread_to_join) |t| {
-                t.join();
+            std.debug.assert(thread_count <= capacity);
+
+            for (threads_to_join[0..thread_count]) |maybe_thread| {
+                if (maybe_thread) |t| {
+                    t.join();
+                }
             }
         }
 
@@ -231,6 +252,8 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
                     }
 
                     if (self.stop_entry(e)) |t| {
+                        std.debug.assert(thread_count < capacity);
+
                         threads_to_join[thread_count] = t;
                         thread_count += 1;
                     }
@@ -244,10 +267,11 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
             }
         }
 
-        fn start_entry(self: *Self, entry: *Entry, slot: u32) void {
+        fn start_entry(self: *Self, entry: *Entry) void {
             _ = self;
 
             std.debug.assert(entry.is_active());
+            std.debug.assert(entry.interval_ms >= interval_min_ms);
 
             if (entry.running.load(.acquire)) {
                 return;
@@ -257,7 +281,15 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
             entry.count.store(0, .release);
             entry.stop_flag.store(false, .release);
 
-            entry.thread = std.Thread.spawn(.{}, repeat_thread, .{ entry, slot }) catch {
+            const thread_context = ThreadContext{
+                .callback = entry.get_callback(),
+                .context = entry.get_context(),
+                .interval_ms = entry.interval_ms,
+                .initial_delay_ms = entry.initial_delay_ms,
+                .stop_flag = &entry.stop_flag,
+            };
+
+            entry.thread = std.Thread.spawn(.{}, repeat_thread, .{thread_context}) catch {
                 entry.running.store(false, .release);
                 entry.thread = null;
 
@@ -283,25 +315,36 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
             return thread;
         }
 
-        fn repeat_thread(entry: *Entry, slot: u32) void {
-            _ = slot;
+        fn repeat_thread(thread_context: ThreadContext) void {
+            std.debug.assert(thread_context.interval_ms >= interval_min_ms);
+            std.debug.assert(thread_context.interval_ms <= interval_max_ms);
 
-            std.debug.assert(entry.is_active());
-
-            if (entry.initial_delay_ms > 0) {
-                w32.Sleep(entry.initial_delay_ms);
+            if (thread_context.initial_delay_ms > 0) {
+                win32.Sleep(thread_context.initial_delay_ms);
             }
 
-            while (!entry.stop_flag.load(.acquire)) {
-                const count_current = entry.count.fetchAdd(1, .acq_rel);
+            var count_current: u32 = 0;
 
-                entry.invoke(count_current);
+            while (!thread_context.stop_flag.load(.acquire)) {
+                std.debug.assert(count_current < count_max);
 
-                if (entry.stop_flag.load(.acquire)) {
+                if (thread_context.callback) |callback| {
+                    if (thread_context.context) |context| {
+                        callback(context, count_current);
+                    }
+                }
+
+                count_current += 1;
+
+                if (thread_context.stop_flag.load(.acquire)) {
                     break;
                 }
 
-                w32.Sleep(entry.interval_ms);
+                if (count_current >= count_max) {
+                    break;
+                }
+
+                win32.Sleep(thread_context.interval_ms);
             }
         }
 
@@ -320,20 +363,27 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
                 for (entries) |*e| {
                     if (e.is_active()) {
                         if (self.stop_entry(e)) |t| {
+                            std.debug.assert(thread_count < capacity);
+
                             threads_to_join[thread_count] = t;
                             thread_count += 1;
                         }
                     }
                 }
-
-                self.base.clear_locked();
             }
+
+            std.debug.assert(thread_count <= capacity);
 
             for (threads_to_join[0..thread_count]) |maybe_thread| {
                 if (maybe_thread) |t| {
                     t.join();
                 }
             }
+
+            self.base.lock();
+            defer self.base.unlock();
+
+            self.base.clear_locked();
         }
     };
 }

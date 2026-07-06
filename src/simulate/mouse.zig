@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const w32 = @import("win32").everything;
+const win32 = @import("win32").everything;
 
 const monitor_mod = @import("../monitor.zig");
 
@@ -118,8 +118,17 @@ pub const Input = extern struct {
 
     pub fn move_absolute(x: i32, y: i32) Input {
         const screen = Screen.get();
+
+        std.debug.assert(screen.virtual_width >= 0);
+        std.debug.assert(screen.virtual_height >= 0);
+
         const norm_x = to_normalized(x - screen.virtual_left, screen.virtual_width);
         const norm_y = to_normalized(y - screen.virtual_top, screen.virtual_height);
+
+        std.debug.assert(norm_x >= 0);
+        std.debug.assert(norm_x <= 65535);
+        std.debug.assert(norm_y >= 0);
+        std.debug.assert(norm_y <= 65535);
 
         return Input{
             .type = type_mouse,
@@ -173,6 +182,11 @@ pub const Input = extern struct {
     }
 
     pub fn wheel(delta: i32) Input {
+        std.debug.assert(delta != 0);
+        std.debug.assert(@rem(delta, wheel_delta) == 0);
+        std.debug.assert(delta >= -(wheel_delta * @as(i32, scroll_clicks_max)));
+        std.debug.assert(delta <= wheel_delta * @as(i32, scroll_clicks_max));
+
         return Input{
             .type = type_mouse,
             .data = .{
@@ -189,6 +203,11 @@ pub const Input = extern struct {
     }
 
     pub fn wheel_horizontal(delta: i32) Input {
+        std.debug.assert(delta != 0);
+        std.debug.assert(@rem(delta, wheel_delta) == 0);
+        std.debug.assert(delta >= -(wheel_delta * @as(i32, scroll_clicks_max)));
+        std.debug.assert(delta <= wheel_delta * @as(i32, scroll_clicks_max));
+
         return Input{
             .type = type_mouse,
             .data = .{
@@ -206,11 +225,18 @@ pub const Input = extern struct {
 };
 
 fn to_normalized(value: i32, screen_size: i32) i32 {
-    std.debug.assert(screen_size >= 1);
+    if (screen_size < 1) {
+        return 0;
+    }
 
-    const normalized: i64 = @divTrunc(@as(i64, value) * 65536, @as(i64, screen_size));
+    const scaled: i64 = @as(i64, value) * 65536 + @divTrunc(@as(i64, screen_size), 2);
+    const normalized: i64 = @divTrunc(scaled, @as(i64, screen_size));
+    const clamped: i64 = std.math.clamp(normalized, 0, 65535);
 
-    return @intCast(normalized);
+    std.debug.assert(clamped >= 0);
+    std.debug.assert(clamped <= 65535);
+
+    return @intCast(clamped);
 }
 
 pub fn send(input: []Input) u32 {
@@ -220,7 +246,7 @@ pub fn send(input: []Input) u32 {
     const count: u32 = @intCast(input.len);
     const size: i32 = @sizeOf(Input);
 
-    const result = w32.SendInput(count, @ptrCast(input.ptr), size);
+    const result = win32.SendInput(count, @ptrCast(input.ptr), size);
 
     std.debug.assert(result <= count);
 

@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const w32 = @import("win32").everything;
+const win32 = @import("win32").everything;
 const Mutex = @import("mutex.zig").Mutex;
 
 const primitive = @import("hook.zig");
@@ -21,15 +21,17 @@ const Monitor = simulate_mouse.Monitor;
 const MonitorList = simulate_mouse.MonitorList;
 
 pub const Error = error{
+    HookAlreadyInstalled,
     HookInstallFailed,
 };
 
 pub const Config = struct {
     capacity: u32 = 128,
+    pass_injected: bool = true,
 };
 
 var instance_global: std.atomic.Value(?*anyopaque) = std.atomic.Value(?*anyopaque).init(null);
-var proc_global: std.atomic.Value(?*const fn (c_int, w32.WPARAM, w32.LPARAM) callconv(.c) w32.LRESULT) = std.atomic.Value(?*const fn (c_int, w32.WPARAM, w32.LPARAM) callconv(.c) w32.LRESULT).init(null);
+var proc_global: std.atomic.Value(?*const fn (c_int, win32.WPARAM, win32.LPARAM) callconv(.c) win32.LRESULT) = std.atomic.Value(?*const fn (c_int, win32.WPARAM, win32.LPARAM) callconv(.c) win32.LRESULT).init(null);
 
 pub fn MouseHook(comptime config: Config) type {
     return struct {
@@ -41,8 +43,8 @@ pub fn MouseHook(comptime config: Config) type {
         running: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
         mutex: Mutex = .{},
         hook_handle: ?primitive.Hook = null,
-        module_handle: ?w32.HINSTANCE = null,
-        blocked: bool = false,
+        module_handle: ?win32.HINSTANCE = null,
+        blocked: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
 
         pub fn init() Self {
             return Self{};
@@ -62,11 +64,11 @@ pub fn MouseHook(comptime config: Config) type {
         }
 
         pub fn is_blocked(self: *const Self) bool {
-            return self.blocked;
+            return self.blocked.load(.seq_cst);
         }
 
         pub fn set_blocked(self: *Self, value: bool) void {
-            self.blocked = value;
+            self.blocked.store(value, .seq_cst);
         }
 
         pub fn click(_: *Self, button: Button) bool {
@@ -233,7 +235,7 @@ pub fn MouseHook(comptime config: Config) type {
             self.mutex.lock();
             defer self.mutex.unlock();
 
-            if (self.running.load(.acquire)) {
+            if (self.running.load(.seq_cst)) {
                 return;
             }
 
@@ -243,49 +245,52 @@ pub fn MouseHook(comptime config: Config) type {
                 return error.HookInstallFailed;
             }
 
-            instance_global.store(self, .release);
-            proc_global.store(Self.hook_proc, .release);
+            if (instance_global.cmpxchgStrong(null, self, .seq_cst, .seq_cst) != null) {
+                return error.HookAlreadyInstalled;
+            }
+
+            proc_global.store(Self.hook_proc, .seq_cst);
 
             self.hook_handle = primitive.Hook.install(.mouse, wrapper_proc, self.module_handle.?);
 
             if (self.hook_handle == null) {
-                instance_global.store(null, .release);
-                proc_global.store(null, .release);
+                proc_global.store(null, .seq_cst);
+                instance_global.store(null, .seq_cst);
+
                 return error.HookInstallFailed;
             }
 
             std.debug.assert(self.hook_handle != null);
             std.debug.assert(self.module_handle != null);
 
-            self.running.store(true, .release);
+            self.running.store(true, .seq_cst);
 
-            std.debug.assert(self.running.load(.acquire));
+            std.debug.assert(self.running.load(.seq_cst));
         }
 
         pub fn stop(self: *Self) void {
             self.mutex.lock();
+            defer self.mutex.unlock();
 
-            if (!self.running.load(.acquire)) {
-                self.mutex.unlock();
+            if (!self.running.load(.seq_cst)) {
                 return;
             }
 
-            self.running.store(false, .release);
-            self.mutex.unlock();
+            self.running.store(false, .seq_cst);
+            proc_global.store(null, .seq_cst);
+            instance_global.store(null, .seq_cst);
 
             if (self.hook_handle) |h| {
                 _ = h.remove();
                 self.hook_handle = null;
             }
 
-            instance_global.store(null, .release);
-            proc_global.store(null, .release);
-
             std.debug.assert(self.hook_handle == null);
+            std.debug.assert(instance_global.load(.seq_cst) != @as(?*anyopaque, self));
         }
 
         pub fn is_running(self: *Self) bool {
-            return self.running.load(.acquire);
+            return self.running.load(.seq_cst);
         }
 
         pub fn is_paused(self: *Self) bool {
@@ -298,9 +303,9 @@ pub fn MouseHook(comptime config: Config) type {
 
         fn hook_proc(
             code_hook: c_int,
-            wparam: w32.WPARAM,
-            lparam: w32.LPARAM,
-        ) callconv(.c) w32.LRESULT {
+            wparam: win32.WPARAM,
+            lparam: win32.LPARAM,
+        ) callconv(.c) win32.LRESULT {
             if (code_hook < 0) {
                 return primitive.next(code_hook, wparam, lparam);
             }
@@ -311,7 +316,11 @@ pub fn MouseHook(comptime config: Config) type {
                 return primitive.next(code_hook, wparam, lparam);
             };
 
-            const instance: ?*Self = @ptrCast(@alignCast(instance_global.load(.acquire)));
+            if (config.pass_injected and parsed.extra == simulate_mouse.marker_injected) {
+                return primitive.next(code_hook, wparam, lparam);
+            }
+
+            const instance: ?*Self = @ptrCast(@alignCast(instance_global.load(.seq_cst)));
 
             if (instance == null) {
                 return primitive.next(code_hook, wparam, lparam);
@@ -321,7 +330,7 @@ pub fn MouseHook(comptime config: Config) type {
 
             const self = instance.?;
 
-            if (self.blocked) {
+            if (self.blocked.load(.seq_cst)) {
                 return 1;
             }
 
@@ -338,9 +347,9 @@ pub fn MouseHook(comptime config: Config) type {
 
 fn wrapper_proc(
     code_hook: c_int,
-    wparam: w32.WPARAM,
-    lparam: w32.LPARAM,
-) callconv(.c) w32.LRESULT {
+    wparam: win32.WPARAM,
+    lparam: win32.LPARAM,
+) callconv(.c) win32.LRESULT {
     if (proc_global.load(.acquire)) |proc| {
         return proc(code_hook, wparam, lparam);
     }

@@ -64,7 +64,7 @@ test "CircularBuffer: push wraps around at capacity" {
     buffer.push('D');
     buffer.push('E');
 
-    try std.testing.expectEqual(@as(u32, 3), buffer.length());
+    try std.testing.expectEqual(@as(u32, 4), buffer.length());
     try std.testing.expect(buffer.is_valid());
 }
 
@@ -168,7 +168,7 @@ test "CircularBuffer: length is capped at capacity" {
         buffer.push('X');
     }
 
-    try std.testing.expectEqual(@as(u32, 3), buffer.length());
+    try std.testing.expectEqual(@as(u32, 4), buffer.length());
     try std.testing.expect(buffer.is_valid());
 }
 
@@ -229,4 +229,44 @@ test "CircularBuffer: sequential pattern building" {
 test "constants: valid ranges" {
     try std.testing.expectEqual(@as(u32, 1), circular.capacity_min);
     try std.testing.expectEqual(@as(u32, 1024), circular.capacity_max);
+}
+
+test "CircularBuffer: push at capacity drops oldest" {
+    var buffer = CircularBuffer(4).init();
+
+    buffer.push('A');
+    buffer.push('B');
+    buffer.push('C');
+    buffer.push('D');
+    buffer.push('E');
+
+    try std.testing.expectEqual(@as(u32, 4), buffer.length());
+    try std.testing.expectEqual(@as(?u8, 'B'), buffer.get(0));
+    try std.testing.expectEqual(@as(?u8, 'E'), buffer.get(3));
+    try std.testing.expect(buffer.get(4) == null);
+}
+
+test "CircularBuffer: pop removes newest" {
+    var buffer = CircularBuffer(16).init();
+
+    buffer.push('A');
+    buffer.push('B');
+    buffer.push('C');
+
+    try std.testing.expectEqual(@as(?u8, 'C'), buffer.pop());
+    try std.testing.expectEqual(@as(u32, 2), buffer.length());
+    try std.testing.expectEqual(@as(?u8, 'A'), buffer.get(0));
+    try std.testing.expectEqual(@as(?u8, 'B'), buffer.get(1));
+}
+
+test "CircularBuffer: pop until empty returns null" {
+    var buffer = CircularBuffer(16).init();
+
+    buffer.push('A');
+    buffer.push('B');
+
+    try std.testing.expectEqual(@as(?u8, 'B'), buffer.pop());
+    try std.testing.expectEqual(@as(?u8, 'A'), buffer.pop());
+    try std.testing.expect(buffer.is_empty());
+    try std.testing.expect(buffer.pop() == null);
 }

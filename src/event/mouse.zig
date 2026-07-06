@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const w32 = @import("win32").everything;
+const win32 = @import("win32").everything;
 
 pub const kind_count: u8 = 11;
 pub const kind_max: u8 = 10;
@@ -27,20 +27,20 @@ pub const Kind = enum(u8) {
         return value <= kind_max;
     }
 
-    pub fn from_message(wparam: w32.WPARAM) Kind {
-        std.debug.assert(@sizeOf(w32.WPARAM) >= 4);
+    pub fn from_message(wparam: win32.WPARAM) Kind {
+        std.debug.assert(@sizeOf(win32.WPARAM) >= 4);
 
         const result: Kind = switch (wparam) {
-            w32.WM_LBUTTONDOWN => .left_down,
-            w32.WM_LBUTTONUP => .left_up,
-            w32.WM_RBUTTONDOWN => .right_down,
-            w32.WM_RBUTTONUP => .right_up,
-            w32.WM_MBUTTONDOWN => .middle_down,
-            w32.WM_MBUTTONUP => .middle_up,
-            w32.WM_XBUTTONDOWN => .x_down,
-            w32.WM_XBUTTONUP => .x_up,
-            w32.WM_MOUSEWHEEL => .wheel,
-            w32.WM_MOUSEMOVE => .move,
+            win32.WM_LBUTTONDOWN => .left_down,
+            win32.WM_LBUTTONUP => .left_up,
+            win32.WM_RBUTTONDOWN => .right_down,
+            win32.WM_RBUTTONUP => .right_up,
+            win32.WM_MBUTTONDOWN => .middle_down,
+            win32.WM_MBUTTONUP => .middle_up,
+            win32.WM_XBUTTONDOWN => .x_down,
+            win32.WM_XBUTTONUP => .x_up,
+            win32.WM_MOUSEWHEEL => .wheel,
+            win32.WM_MOUSEMOVE => .move,
             else => .other,
         };
 
@@ -51,7 +51,6 @@ pub const Kind = enum(u8) {
 
     pub fn is_button(self: Kind) bool {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromEnum(self) <= kind_max);
 
         return switch (self) {
             .left_down, .left_up => true,
@@ -64,7 +63,6 @@ pub const Kind = enum(u8) {
 
     pub fn is_down(self: Kind) bool {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromEnum(self) <= kind_max);
 
         return switch (self) {
             .left_down, .right_down, .middle_down, .x_down => true,
@@ -74,7 +72,6 @@ pub const Kind = enum(u8) {
 
     pub fn is_up(self: Kind) bool {
         std.debug.assert(self.is_valid());
-        std.debug.assert(@intFromEnum(self) <= kind_max);
 
         return switch (self) {
             .left_up, .right_up, .middle_up, .x_up => true,
@@ -116,9 +113,9 @@ pub const Mouse = struct {
         return self.kind.is_up();
     }
 
-    pub fn parse(wparam: w32.WPARAM, lparam: w32.LPARAM) ?Mouse {
-        std.debug.assert(@sizeOf(w32.WPARAM) >= 4);
-        std.debug.assert(@sizeOf(w32.LPARAM) >= 4);
+    pub fn parse(wparam: win32.WPARAM, lparam: win32.LPARAM) ?Mouse {
+        std.debug.assert(@sizeOf(win32.WPARAM) >= 4);
+        std.debug.assert(@sizeOf(win32.LPARAM) >= 4);
 
         const data = extract(lparam) orelse return null;
 
@@ -135,8 +132,8 @@ pub const Mouse = struct {
         return result;
     }
 
-    fn extract(lparam: w32.LPARAM) ?*w32.MSLLHOOKSTRUCT {
-        std.debug.assert(@sizeOf(w32.LPARAM) >= 4);
+    fn extract(lparam: win32.LPARAM) ?*win32.MSLLHOOKSTRUCT {
+        std.debug.assert(@sizeOf(win32.LPARAM) >= 4);
 
         if (lparam == 0) {
             return null;

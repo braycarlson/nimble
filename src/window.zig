@@ -1,32 +1,32 @@
 const std = @import("std");
 
-const w32 = @import("win32").everything;
+const win32 = @import("win32").everything;
 
 pub const buffer_max: u16 = 256;
 
 pub const GUITHREADINFO = extern struct {
     cbSize: u32,
     flags: u32,
-    hwndActive: ?w32.HWND,
-    hwndFocus: ?w32.HWND,
-    hwndCapture: ?w32.HWND,
-    hwndMenuOwner: ?w32.HWND,
-    hwndMoveSize: ?w32.HWND,
-    hwndCaret: ?w32.HWND,
-    rcCaret: w32.RECT,
+    hwndActive: ?win32.HWND,
+    hwndFocus: ?win32.HWND,
+    hwndCapture: ?win32.HWND,
+    hwndMenuOwner: ?win32.HWND,
+    hwndMoveSize: ?win32.HWND,
+    hwndCaret: ?win32.HWND,
+    rcCaret: win32.RECT,
 };
 
-pub extern "user32" fn GetGUIThreadInfo(idThread: u32, pgui: *GUITHREADINFO) callconv(.c) w32.BOOL;
+pub extern "user32" fn GetGUIThreadInfo(idThread: u32, pgui: *GUITHREADINFO) callconv(.c) win32.BOOL;
 
-pub fn get_foreground() ?w32.HWND {
-    return w32.GetForegroundWindow();
+pub fn get_foreground() ?win32.HWND {
+    return win32.GetForegroundWindow();
 }
 
-pub fn get_focused() ?w32.HWND {
-    const foreground = w32.GetForegroundWindow() orelse return null;
+pub fn get_focused() ?win32.HWND {
+    const foreground = win32.GetForegroundWindow() orelse return null;
 
     var process_id: u32 = 0;
-    const thread_id = w32.GetWindowThreadProcessId(foreground, &process_id);
+    const thread_id = win32.GetWindowThreadProcessId(foreground, &process_id);
 
     if (thread_id == 0) {
         return foreground;
@@ -44,30 +44,30 @@ pub fn get_focused() ?w32.HWND {
     return foreground;
 }
 
-pub fn get_thread_id(hwnd: w32.HWND) u32 {
+pub fn get_thread_id(hwnd: win32.HWND) u32 {
     var process_id: u32 = 0;
-    return w32.GetWindowThreadProcessId(hwnd, &process_id);
+    return win32.GetWindowThreadProcessId(hwnd, &process_id);
 }
 
-pub fn get_process_id(hwnd: w32.HWND) u32 {
+pub fn get_process_id(hwnd: win32.HWND) u32 {
     var process_id: u32 = 0;
-    _ = w32.GetWindowThreadProcessId(hwnd, &process_id);
+    _ = win32.GetWindowThreadProcessId(hwnd, &process_id);
     return process_id;
 }
 
-pub fn is_fullscreen(hwnd: w32.HWND) bool {
-    var rect: w32.RECT = std.mem.zeroes(w32.RECT);
+pub fn is_fullscreen(hwnd: win32.HWND) bool {
+    var rect: win32.RECT = std.mem.zeroes(win32.RECT);
 
-    if (w32.GetWindowRect(hwnd, &rect) == 0) {
+    if (win32.GetWindowRect(hwnd, &rect) == 0) {
         return false;
     }
 
-    const monitor = w32.MonitorFromWindow(hwnd, w32.MONITOR_DEFAULTTONEAREST) orelse return false;
+    const monitor = win32.MonitorFromWindow(hwnd, win32.MONITOR_DEFAULTTONEAREST) orelse return false;
 
-    var info: w32.MONITORINFO = std.mem.zeroes(w32.MONITORINFO);
-    info.cbSize = @sizeOf(w32.MONITORINFO);
+    var info: win32.MONITORINFO = std.mem.zeroes(win32.MONITORINFO);
+    info.cbSize = @sizeOf(win32.MONITORINFO);
 
-    if (w32.GetMonitorInfoW(monitor, &info) == 0) {
+    if (win32.GetMonitorInfoW(monitor, &info) == 0) {
         return false;
     }
 
@@ -81,83 +81,127 @@ pub fn is_fullscreen(hwnd: w32.HWND) bool {
     return match_left and match_top and match_right and match_bottom;
 }
 
-pub fn is_maximized(hwnd: w32.HWND) bool {
-    var placement: w32.WINDOWPLACEMENT = std.mem.zeroes(w32.WINDOWPLACEMENT);
-    placement.length = @sizeOf(w32.WINDOWPLACEMENT);
+pub fn is_maximized(hwnd: win32.HWND) bool {
+    var placement: win32.WINDOWPLACEMENT = std.mem.zeroes(win32.WINDOWPLACEMENT);
+    placement.length = @sizeOf(win32.WINDOWPLACEMENT);
 
-    if (w32.GetWindowPlacement(hwnd, &placement) == 0) {
+    if (win32.GetWindowPlacement(hwnd, &placement) == 0) {
         return false;
     }
 
-    return placement.showCmd == w32.SW_SHOWMAXIMIZED;
+    return placement.showCmd == win32.SW_SHOWMAXIMIZED;
 }
 
-pub fn is_minimized(hwnd: w32.HWND) bool {
-    var placement: w32.WINDOWPLACEMENT = std.mem.zeroes(w32.WINDOWPLACEMENT);
-    placement.length = @sizeOf(w32.WINDOWPLACEMENT);
+pub fn is_minimized(hwnd: win32.HWND) bool {
+    var placement: win32.WINDOWPLACEMENT = std.mem.zeroes(win32.WINDOWPLACEMENT);
+    placement.length = @sizeOf(win32.WINDOWPLACEMENT);
 
-    if (w32.GetWindowPlacement(hwnd, &placement) == 0) {
+    if (win32.GetWindowPlacement(hwnd, &placement) == 0) {
         return false;
     }
 
-    return placement.showCmd == w32.SW_SHOWMINIMIZED;
+    return placement.showCmd == win32.SW_SHOWMINIMIZED;
 }
 
-pub fn is_visible(hwnd: w32.HWND) bool {
-    return w32.IsWindowVisible(hwnd) != 0;
+pub fn is_visible(hwnd: win32.HWND) bool {
+    return win32.IsWindowVisible(hwnd) != 0;
 }
 
-pub fn is_enabled(hwnd: w32.HWND) bool {
-    return w32.IsWindowEnabled(hwnd) != 0;
+pub fn is_enabled(hwnd: win32.HWND) bool {
+    return win32.IsWindowEnabled(hwnd) != 0;
 }
 
-pub fn get_class(hwnd: w32.HWND, buffer: []u8) ?[]const u8 {
+fn utf16_to_utf8(source: []const u16, target: []u8) ?[]const u8 {
+    std.debug.assert(source.len <= buffer_max);
+    std.debug.assert(target.len > 0);
+
+    var iterator = std.unicode.Utf16LeIterator.init(source);
+    var written: usize = 0;
+
+    while (iterator.nextCodepoint() catch return null) |codepoint| {
+        var encoded: [4]u8 = undefined;
+
+        const size = std.unicode.utf8Encode(codepoint, &encoded) catch return null;
+
+        if (written + size > target.len) {
+            break;
+        }
+
+        @memcpy(target[written .. written + size], encoded[0..size]);
+
+        written += size;
+    }
+
+    std.debug.assert(written <= target.len);
+
+    return target[0..written];
+}
+
+pub fn get_class(hwnd: win32.HWND, buffer: []u8) ?[]const u8 {
     std.debug.assert(buffer.len > 0);
     std.debug.assert(buffer.len <= buffer_max);
 
-    const len = w32.GetClassNameA(hwnd, @ptrCast(buffer.ptr), @intCast(buffer.len));
+    var utf16: [buffer_max:0]u16 = undefined;
 
-    if (len == 0) {
+    const len = win32.GetClassNameW(hwnd, &utf16, buffer_max);
+
+    std.debug.assert(len < buffer_max);
+
+    if (len <= 0) {
         return null;
     }
 
-    return buffer[0..@intCast(len)];
+    return utf16_to_utf8(utf16[0..@intCast(len)], buffer);
 }
 
-pub fn get_title(hwnd: w32.HWND, buffer: []u8) ?[]const u8 {
+pub fn get_title(hwnd: win32.HWND, buffer: []u8) ?[]const u8 {
     std.debug.assert(buffer.len > 0);
     std.debug.assert(buffer.len <= buffer_max);
 
-    const len = w32.GetWindowTextA(hwnd, @ptrCast(buffer.ptr), @intCast(buffer.len));
+    var utf16: [buffer_max:0]u16 = undefined;
 
-    if (len == 0) {
+    win32.SetLastError(.NO_ERROR);
+
+    const len = win32.GetWindowTextW(hwnd, &utf16, buffer_max);
+
+    std.debug.assert(len < buffer_max);
+
+    if (len < 0) {
         return null;
     }
 
-    return buffer[0..@intCast(len)];
+    if (len == 0) {
+        if (win32.GetLastError() != .NO_ERROR) {
+            return null;
+        }
+
+        return buffer[0..0];
+    }
+
+    return utf16_to_utf8(utf16[0..@intCast(len)], buffer);
 }
 
-pub fn get_rect(hwnd: w32.HWND) ?w32.RECT {
-    var rect: w32.RECT = std.mem.zeroes(w32.RECT);
+pub fn get_rect(hwnd: win32.HWND) ?win32.RECT {
+    var rect: win32.RECT = std.mem.zeroes(win32.RECT);
 
-    if (w32.GetWindowRect(hwnd, &rect) == 0) {
+    if (win32.GetWindowRect(hwnd, &rect) == 0) {
         return null;
     }
 
     return rect;
 }
 
-pub fn get_client_rect(hwnd: w32.HWND) ?w32.RECT {
-    var rect: w32.RECT = std.mem.zeroes(w32.RECT);
+pub fn get_client_rect(hwnd: win32.HWND) ?win32.RECT {
+    var rect: win32.RECT = std.mem.zeroes(win32.RECT);
 
-    if (w32.GetClientRect(hwnd, &rect) == 0) {
+    if (win32.GetClientRect(hwnd, &rect) == 0) {
         return null;
     }
 
     return rect;
 }
 
-pub fn class_matches(hwnd: w32.HWND, target: []const u8) bool {
+pub fn class_matches(hwnd: win32.HWND, target: []const u8) bool {
     var buffer: [buffer_max]u8 = undefined;
 
     const class = get_class(hwnd, &buffer) orelse return false;
@@ -165,7 +209,7 @@ pub fn class_matches(hwnd: w32.HWND, target: []const u8) bool {
     return std.mem.indexOf(u8, class, target) != null;
 }
 
-pub fn title_matches(hwnd: w32.HWND, target: []const u8) bool {
+pub fn title_matches(hwnd: win32.HWND, target: []const u8) bool {
     var buffer: [buffer_max]u8 = undefined;
 
     const title = get_title(hwnd, &buffer) orelse return false;

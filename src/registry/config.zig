@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const modifier = @import("../modifier.zig");
 const pattern_mod = @import("../builder/pattern.zig");
 
@@ -78,63 +80,71 @@ pub const MacroConfig = struct {
     }
 
     pub fn text(self: MacroConfig, txt: []const u8) MacroConfig {
+        std.debug.assert(self.step_count < steps_max);
+
         var result = self;
 
-        if (result.step_count < steps_max) {
-            result.steps[result.step_count] = .{
-                .kind = .text,
-                .text = txt,
-            };
+        result.steps[result.step_count] = .{
+            .kind = .text,
+            .text = txt,
+        };
 
-            result.step_count += 1;
-        }
+        result.step_count += 1;
+
+        std.debug.assert(result.step_count <= steps_max);
 
         return result;
     }
 
     pub fn line(self: MacroConfig, txt: []const u8) MacroConfig {
+        std.debug.assert(self.step_count < steps_max);
+
         var result = self;
 
-        if (result.step_count < steps_max) {
-            result.steps[result.step_count] = .{
-                .kind = .line,
-                .text = txt,
-            };
+        result.steps[result.step_count] = .{
+            .kind = .line,
+            .text = txt,
+        };
 
-            result.step_count += 1;
-        }
+        result.step_count += 1;
+
+        std.debug.assert(result.step_count <= steps_max);
 
         return result;
     }
 
     pub fn key(self: MacroConfig, comptime pattern: []const u8) MacroConfig {
+        std.debug.assert(self.step_count < steps_max);
+
         const parsed = comptime pattern_mod.parse(pattern);
         var result = self;
 
-        if (result.step_count < steps_max) {
-            result.steps[result.step_count] = .{
-                .kind = .key,
-                .key_code = parsed.key,
-                .key_modifiers = parsed.modifiers,
-            };
+        result.steps[result.step_count] = .{
+            .kind = .key,
+            .key_code = parsed.key,
+            .key_modifiers = parsed.modifiers,
+        };
 
-            result.step_count += 1;
-        }
+        result.step_count += 1;
+
+        std.debug.assert(result.step_count <= steps_max);
 
         return result;
     }
 
     pub fn delay(self: MacroConfig, ms: u32) MacroConfig {
+        std.debug.assert(self.step_count < steps_max);
+
         var result = self;
 
-        if (result.step_count < steps_max) {
-            result.steps[result.step_count] = .{
-                .kind = .delay,
-                .delay_ms = ms,
-            };
+        result.steps[result.step_count] = .{
+            .kind = .delay,
+            .delay_ms = ms,
+        };
 
-            result.step_count += 1;
-        }
+        result.step_count += 1;
+
+        std.debug.assert(result.step_count <= steps_max);
 
         return result;
     }

@@ -1,12 +1,12 @@
 const std = @import("std");
 
 const common = @import("common");
-const state_mod = @import("state.zig");
+const state = @import("state.zig");
 const simulator = @import("simulator.zig");
 
-const Event = state_mod.Event;
-const Stats = state_mod.Stats;
-const Snapshot = state_mod.Snapshot;
+const Event = state.Event;
+const Stats = state.Stats;
+const Snapshot = state.Snapshot;
 
 const VOPR = simulator.VOPR;
 const ReplayEntry = simulator.ReplayEntry;
@@ -23,7 +23,7 @@ pub const HeaderExtra = extern struct {
     reserved: [27]u8 = [_]u8{0} ** 27,
 
     pub fn is_valid(self: *const HeaderExtra) bool {
-        const valid_snapshot = self.snapshot_count <= state_mod.max_snapshots;
+        const valid_snapshot = self.snapshot_count <= state.max_snapshots;
         const result = valid_snapshot;
 
         return result;
@@ -213,8 +213,8 @@ pub const Recording = struct {
     stats: Stats,
 
     pub fn is_valid(self: *const Recording) bool {
-        const valid_events = self.events.len <= state_mod.max_events;
-        const valid_snapshots = self.snapshots.len <= state_mod.max_snapshots;
+        const valid_events = self.events.len <= state.max_events;
+        const valid_snapshots = self.snapshots.len <= state.max_snapshots;
         const valid_stats = self.stats.is_valid();
         const result = valid_events and valid_snapshots and valid_stats;
 
@@ -303,7 +303,7 @@ pub const Recording = struct {
     }
 
     fn parse_events(allocator: std.mem.Allocator, json_events: []const JsonEvent) ![]Event {
-        std.debug.assert(json_events.len <= state_mod.max_events);
+        std.debug.assert(json_events.len <= state.max_events);
 
         var events = try allocator.alloc(Event, json_events.len);
         errdefer allocator.free(events);
@@ -311,7 +311,7 @@ pub const Recording = struct {
         for (json_events, 0..) |evt, i| {
             events[i] = Event{
                 .tick = evt.tick,
-                .kind = std.meta.stringToEnum(state_mod.EventKind, evt.kind) orelse .key_down,
+                .kind = std.meta.stringToEnum(state.EventKind, evt.kind) orelse .key_down,
                 .keycode = evt.keycode,
                 .binding_id = 0,
                 .response = null,

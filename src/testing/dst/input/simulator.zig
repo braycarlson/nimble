@@ -8,13 +8,13 @@ const input_fuzz = fuzz.input;
 const input = @import("input");
 const keycode = input.keycode;
 const modifier = input.modifier;
-const binding_mod = input.binding_mod;
+const binding = input.binding;
 const state = input.state;
 const response_mod = input.response;
 const registry = input.registry;
 const event = input.event;
 
-const Binding = binding_mod.Binding;
+const Binding = binding.Binding;
 const Keyboard = state.Keyboard;
 const Response = response_mod.Response;
 const KeyRegistry = registry.key.KeyRegistry;

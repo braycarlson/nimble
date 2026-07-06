@@ -23,12 +23,14 @@ pub fn CircularBuffer(comptime capacity: u32) type {
         buffer: [capacity]u8 = [_]u8{0} ** capacity,
         head: u32 = 0,
         tail: u32 = 0,
+        count: u32 = 0,
 
         pub fn init() Self {
             const result = Self{};
 
             std.debug.assert(result.head == 0);
             std.debug.assert(result.tail == 0);
+            std.debug.assert(result.count == 0);
             std.debug.assert(result.is_empty());
 
             return result;
@@ -40,8 +42,9 @@ pub fn CircularBuffer(comptime capacity: u32) type {
 
             const head_valid = self.head < capacity;
             const tail_valid = self.tail < capacity;
+            const count_valid = self.count <= capacity;
 
-            return head_valid and tail_valid;
+            return head_valid and tail_valid and count_valid;
         }
 
         pub fn clear(self: *Self) void {
@@ -49,9 +52,11 @@ pub fn CircularBuffer(comptime capacity: u32) type {
 
             self.head = 0;
             self.tail = 0;
+            self.count = 0;
 
             std.debug.assert(self.head == 0);
             std.debug.assert(self.tail == 0);
+            std.debug.assert(self.count == 0);
             std.debug.assert(self.is_empty());
         }
 
@@ -77,23 +82,14 @@ pub fn CircularBuffer(comptime capacity: u32) type {
         pub fn is_empty(self: *const Self) bool {
             std.debug.assert(self.is_valid());
 
-            return self.head == self.tail;
+            return self.count == 0;
         }
 
         pub fn length(self: *const Self) u32 {
             std.debug.assert(self.is_valid());
+            std.debug.assert(self.count <= capacity);
 
-            var result: u32 = 0;
-
-            if (self.tail >= self.head) {
-                result = self.tail - self.head;
-            } else {
-                result = capacity - self.head + self.tail;
-            }
-
-            std.debug.assert(result < capacity);
-
-            return result;
+            return self.count;
         }
 
         pub fn match(self: *const Self, pattern: []const u8) Error!bool {
@@ -129,11 +125,14 @@ pub fn CircularBuffer(comptime capacity: u32) type {
             self.buffer[self.tail] = value;
             self.tail = wrap(self.tail + 1);
 
-            if (self.tail == self.head) {
+            if (self.count == capacity) {
                 self.head = wrap(self.head + 1);
+            } else {
+                self.count += 1;
             }
 
             std.debug.assert(self.is_valid());
+            std.debug.assert(self.count <= capacity);
             std.debug.assert(self.buffer[wrap(self.tail + capacity - 1)] == value);
         }
 
@@ -145,6 +144,7 @@ pub fn CircularBuffer(comptime capacity: u32) type {
             }
 
             self.tail = decrement(self.tail);
+            self.count -= 1;
 
             const result = self.buffer[self.tail];
 

@@ -54,18 +54,13 @@ pub const Binding = struct {
         std.debug.assert(self.is_valid());
         std.debug.assert(self.modifiers.flags <= modifier.flag_all);
 
-        var hash: u32 = 0;
+        const mods: u32 = self.modifiers.to_bits();
+        const result: u32 = (mods << 8) | @as(u32, self.value);
 
-        hash = hash *% hash_factor +% @as(u32, self.value);
+        std.debug.assert(result & 0xFF == self.value);
+        std.debug.assert(result >> 8 == mods);
 
-        if (self.modifiers.ctrl()) hash = hash *% hash_factor +% 1;
-        if (self.modifiers.alt()) hash = hash *% hash_factor +% 2;
-        if (self.modifiers.shift()) hash = hash *% hash_factor +% 3;
-        if (self.modifiers.win()) hash = hash *% hash_factor +% 4;
-
-        std.debug.assert(hash >= self.value);
-
-        return hash;
+        return result;
     }
 
     pub fn match(self: *const Binding, keyboard: *const Keyboard) bool {

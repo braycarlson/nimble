@@ -1,11 +1,12 @@
 const std = @import("std");
 
-const circular_mod = @import("../buffer/circular.zig");
+const circular = @import("../buffer/circular.zig");
 const character = @import("../character.zig");
 const keycode = @import("../keycode.zig");
 const key_event = @import("../event/key.zig");
 const response_mod = @import("../response.zig");
-const base_mod = @import("base.zig");
+const base = @import("base.zig");
+const Mutex = @import("../mutex.zig").Mutex;
 
 const Key = key_event.Key;
 const Response = response_mod.Response;
@@ -15,7 +16,7 @@ pub const buffer_max: u32 = 128;
 pub const capacity_default: u32 = 32;
 pub const capacity_max: u32 = 128;
 
-pub const Error = base_mod.BaseError || error{
+pub const Error = base.BaseError || error{
     AlreadyRegistered,
     InvalidName,
 };
@@ -78,8 +79,22 @@ pub const Entry = struct {
     }
 };
 
+const Invocation = struct {
+    callback: Callback,
+    context: *anyopaque,
+    name: [name_max]u8,
+    name_len: u8,
+    args: [buffer_max]u8,
+    args_len: u32,
+};
+
+const NameScan = struct {
+    len: u8,
+    end: u32,
+};
+
 pub fn CommandRegistry(comptime capacity: u8) type {
-    const Buffer = circular_mod.CircularBuffer(buffer_max);
+    const Buffer = circular.CircularBuffer(buffer_max);
 
     return struct {
         const Self = @This();
@@ -90,6 +105,7 @@ pub fn CommandRegistry(comptime capacity: u8) type {
         buffer: Buffer = Buffer.init(),
         trigger: u8 = ':',
         enabled: bool = true,
+        mutex: Mutex = .{},
 
         pub fn init() Self {
             return Self{};
@@ -109,8 +125,6 @@ pub fn CommandRegistry(comptime capacity: u8) type {
             callback: Callback,
             context: anytype,
         ) Error!u32 {
-            std.debug.assert(self.is_valid());
-
             if (name.len == 0 or name.len > name_max) {
                 return error.InvalidName;
             }
@@ -120,6 +134,11 @@ pub fn CommandRegistry(comptime capacity: u8) type {
                     return error.InvalidName;
                 }
             }
+
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            std.debug.assert(self.is_valid());
 
             for (&self.entries) |*entry| {
                 if (entry.active and std.mem.eql(u8, entry.get_name(), name)) {
@@ -153,6 +172,11 @@ pub fn CommandRegistry(comptime capacity: u8) type {
         pub fn unregister(self: *Self, id: u32) Error!void {
             std.debug.assert(id >= 1);
 
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            std.debug.assert(self.is_valid());
+
             for (&self.entries) |*entry| {
                 if (entry.id == id and entry.active) {
                     entry.active = false;
@@ -165,15 +189,37 @@ pub fn CommandRegistry(comptime capacity: u8) type {
         }
 
         pub fn process(self: *Self, key: *const Key) Response {
+            std.debug.assert(key.is_valid());
+
+            const invocation = blk: {
+                self.mutex.lock();
+                defer self.mutex.unlock();
+
+                std.debug.assert(self.is_valid());
+
+                break :blk self.process_locked(key);
+            };
+
+            if (invocation) |inv| {
+                std.debug.assert(inv.name_len >= 1);
+                std.debug.assert(inv.args_len <= buffer_max);
+
+                return inv.callback(inv.context, inv.name[0..inv.name_len], inv.args[0..inv.args_len]);
+            }
+
+            return .pass;
+        }
+
+        fn process_locked(self: *Self, key: *const Key) ?Invocation {
             std.debug.assert(self.is_valid());
             std.debug.assert(key.is_valid());
 
             if (!self.enabled) {
-                return .pass;
+                return null;
             }
 
             if (!key.down) {
-                return .pass;
+                return null;
             }
 
             const c = character.from_keycode(key.value);
@@ -182,34 +228,80 @@ pub fn CommandRegistry(comptime capacity: u8) type {
                 if (key.value == keycode.back) {
                     _ = self.buffer.pop();
                 }
-                return .pass;
+                return null;
+            }
+
+            if (self.buffer.length() >= buffer_max - 1) {
+                self.buffer.clear();
+                return null;
             }
 
             self.buffer.push(c);
 
             if (key.value == keycode.@"return") {
-                const result = self.try_execute();
+                const invocation = self.try_execute_locked();
                 self.buffer.clear();
-                return result;
+                return invocation;
             }
 
-            return .pass;
+            return null;
         }
 
-        fn try_execute(self: *Self) Response {
+        fn try_execute_locked(self: *Self) ?Invocation {
             std.debug.assert(self.is_valid());
 
             const len = self.buffer.length();
 
             if (len < 2) {
-                return .pass;
+                return null;
             }
 
-            const first = self.buffer.get(0) orelse return .pass;
+            const first = self.buffer.get(0) orelse return null;
 
             if (first != self.trigger) {
-                return .pass;
+                return null;
             }
+
+            var name_buf: [name_max]u8 = undefined;
+            const name_scan = self.scan_name_locked(&name_buf) orelse return null;
+
+            var args_buf: [buffer_max]u8 = undefined;
+            const args_len = self.scan_args_locked(name_scan.end, &args_buf);
+
+            std.debug.assert(name_scan.len >= 1);
+            std.debug.assert(args_len <= buffer_max);
+
+            const name = name_buf[0..name_scan.len];
+
+            for (&self.entries) |*entry| {
+                if (!entry.active) {
+                    continue;
+                }
+
+                if (!std.mem.eql(u8, entry.get_name(), name)) {
+                    continue;
+                }
+
+                const callback = entry.callback orelse continue;
+                const context = entry.context orelse continue;
+
+                return Invocation{
+                    .callback = callback,
+                    .context = context,
+                    .name = name_buf,
+                    .name_len = name_scan.len,
+                    .args = args_buf,
+                    .args_len = args_len,
+                };
+            }
+
+            return null;
+        }
+
+        fn scan_name_locked(self: *Self, name_out: *[name_max]u8) ?NameScan {
+            const len = self.buffer.length();
+
+            std.debug.assert(len >= 2);
 
             var name_end: u32 = 1;
 
@@ -222,23 +314,31 @@ pub fn CommandRegistry(comptime capacity: u8) type {
             }
 
             if (name_end <= 1) {
-                return .pass;
+                return null;
             }
 
-            var name_buf: [name_max]u8 = undefined;
             const name_len = name_end - 1;
 
             if (name_len > name_max) {
-                return .pass;
+                return null;
             }
 
             for (0..name_len) |i| {
-                name_buf[i] = self.buffer.get(@intCast(i + 1)) orelse return .pass;
+                name_out[i] = self.buffer.get(@intCast(i + 1)) orelse return null;
             }
 
             std.debug.assert(name_len <= name_max);
 
-            const name = name_buf[0..name_len];
+            return NameScan{
+                .len = @intCast(name_len),
+                .end = name_end,
+            };
+        }
+
+        fn scan_args_locked(self: *Self, name_end: u32, args_out: *[buffer_max]u8) u32 {
+            const len = self.buffer.length();
+
+            std.debug.assert(name_end <= len);
 
             var args_start = name_end;
 
@@ -250,9 +350,7 @@ pub fn CommandRegistry(comptime capacity: u8) type {
                 }
             }
 
-            var args_buf: [buffer_max]u8 = undefined;
             var args_len: u32 = 0;
-
             var i = args_start;
 
             while (i < len and args_len < buffer_max) : (i += 1) {
@@ -262,23 +360,13 @@ pub fn CommandRegistry(comptime capacity: u8) type {
                     break;
                 }
 
-                args_buf[args_len] = c;
+                args_out[args_len] = c;
                 args_len += 1;
             }
 
             std.debug.assert(args_len <= buffer_max);
 
-            const args = args_buf[0..args_len];
-
-            for (&self.entries) |*entry| {
-                if (entry.active and std.mem.eql(u8, entry.get_name(), name)) {
-                    if (entry.invoke(name, args)) |response| {
-                        return response;
-                    }
-                }
-            }
-
-            return .pass;
+            return args_len;
         }
 
         fn find_empty_slot(self: *const Self) ?u8 {
@@ -296,12 +384,19 @@ pub fn CommandRegistry(comptime capacity: u8) type {
         }
 
         pub fn clear(self: *Self) void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            std.debug.assert(self.is_valid());
+
             for (&self.entries) |*entry| {
                 entry.active = false;
             }
 
             self.count = 0;
             self.buffer.clear();
+
+            std.debug.assert(self.count == 0);
         }
     };
 }

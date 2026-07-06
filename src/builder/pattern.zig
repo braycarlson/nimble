@@ -27,6 +27,9 @@ pub fn parse(comptime pattern: []const u8) ParsedPattern {
         const part = pattern[start..];
         key_value = parse_key(part);
 
+        std.debug.assert(key_value != 0);
+        std.debug.assert(keycode.is_valid(key_value));
+
         return ParsedPattern{
             .key = key_value,
             .modifiers = modifier.Set.from(mods),
@@ -34,30 +37,43 @@ pub fn parse(comptime pattern: []const u8) ParsedPattern {
     }
 }
 
-fn parse_modifier(part: []const u8, current: modifier.Set.Args) modifier.Set.Args {
+fn parse_modifier(comptime part: []const u8, current: modifier.Set.Args) modifier.Set.Args {
     std.debug.assert(part.len > 0);
+
+    if (part.len > 16) {
+        @compileError("unknown modifier: " ++ part);
+    }
+
+    var lowered: [part.len]u8 = undefined;
+
+    for (part, 0..) |char, index| {
+        lowered[index] = std.ascii.toLower(char);
+    }
+
+    const kind = modifier.Kind.from_string(&lowered) orelse @compileError("unknown modifier: " ++ part);
+
+    std.debug.assert(kind.is_valid());
 
     var result = current;
 
-    if (std.mem.eql(u8, part, "Ctrl") or std.mem.eql(u8, part, "ctrl")) {
-        result.ctrl = true;
-    } else if (std.mem.eql(u8, part, "Alt") or std.mem.eql(u8, part, "alt")) {
-        result.alt = true;
-    } else if (std.mem.eql(u8, part, "Shift") or std.mem.eql(u8, part, "shift")) {
-        result.shift = true;
-    } else if (std.mem.eql(u8, part, "Win") or std.mem.eql(u8, part, "win")) {
-        result.win = true;
+    switch (kind) {
+        .ctrl => result.ctrl = true,
+        .alt => result.alt = true,
+        .shift => result.shift = true,
+        .win => result.win = true,
     }
 
     return result;
 }
 
-fn parse_key(part: []const u8) u8 {
+fn parse_key(comptime part: []const u8) u8 {
     std.debug.assert(part.len > 0);
 
     if (part.len == 1) {
-        return std.ascii.toUpper(part[0]);
+        return parse_key_char(part[0]);
     }
+
+    std.debug.assert(part.len > 1);
 
     if (std.mem.eql(u8, part, "Space")) return keycode.space;
     if (std.mem.eql(u8, part, "Enter") or std.mem.eql(u8, part, "Return")) return keycode.@"return";
@@ -88,5 +104,34 @@ fn parse_key(part: []const u8) u8 {
     if (std.mem.eql(u8, part, "F11")) return keycode.f11;
     if (std.mem.eql(u8, part, "F12")) return keycode.f12;
 
-    return 0;
+    @compileError("unknown key: " ++ part);
+}
+
+fn parse_key_char(comptime char: u8) u8 {
+    std.debug.assert(char != 0);
+    std.debug.assert(char < 0x80);
+
+    const upper = std.ascii.toUpper(char);
+    const alpha = upper >= 'A' and upper <= 'Z';
+    const digit = upper >= '0' and upper <= '9';
+
+    if (alpha or digit) {
+        std.debug.assert(keycode.is_valid(upper));
+        return upper;
+    }
+
+    return switch (char) {
+        ';' => keycode.oem_1,
+        '/' => keycode.oem_2,
+        '`' => keycode.oem_3,
+        '[' => keycode.oem_4,
+        '\\' => keycode.oem_5,
+        ']' => keycode.oem_6,
+        '\'' => keycode.oem_7,
+        '=' => keycode.oem_plus,
+        ',' => keycode.oem_comma,
+        '-' => keycode.oem_minus,
+        '.' => keycode.oem_period,
+        else => @compileError(std.fmt.comptimePrint("unknown key character: {c}", .{char})),
+    };
 }

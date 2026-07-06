@@ -30,6 +30,14 @@ pub const lwin: u8 = 0x5B;
 pub const rwin: u8 = 0x5C;
 pub const app: u8 = 0x5D;
 pub const numpad0: u8 = 0x60;
+pub const numpad1: u8 = 0x61;
+pub const numpad2: u8 = 0x62;
+pub const numpad3: u8 = 0x63;
+pub const numpad4: u8 = 0x64;
+pub const numpad5: u8 = 0x65;
+pub const numpad6: u8 = 0x66;
+pub const numpad7: u8 = 0x67;
+pub const numpad8: u8 = 0x68;
 pub const numpad9: u8 = 0x69;
 pub const multiply: u8 = 0x6A;
 pub const add: u8 = 0x6B;
@@ -93,6 +101,16 @@ const name_map = std.StaticStringMap(u8).initComptime(.{
     .{ "delete", delete },
     .{ "del", delete },
     .{ "f1", f1 },
+    .{ "f2", f2 },
+    .{ "f3", f3 },
+    .{ "f4", f4 },
+    .{ "f5", f5 },
+    .{ "f6", f6 },
+    .{ "f7", f7 },
+    .{ "f8", f8 },
+    .{ "f9", f9 },
+    .{ "f10", f10 },
+    .{ "f11", f11 },
     .{ "f12", f12 },
     .{ "numlock", numlock },
     .{ "scrolllock", scroll },
@@ -138,6 +156,10 @@ pub fn from_string(text: []const u8) ?u8 {
     }
 
     std.debug.assert(text.len > 1);
+
+    if (text.len > 16) {
+        return null;
+    }
 
     return from_name(text);
 }
@@ -219,6 +241,16 @@ pub fn to_name(value: u8) ?[]const u8 {
         lwin, rwin => "Win",
         app => "App",
         f1 => "F1",
+        f2 => "F2",
+        f3 => "F3",
+        f4 => "F4",
+        f5 => "F5",
+        f6 => "F6",
+        f7 => "F7",
+        f8 => "F8",
+        f9 => "F9",
+        f10 => "F10",
+        f11 => "F11",
         f12 => "F12",
         numlock => "NumLock",
         scroll => "ScrollLock",

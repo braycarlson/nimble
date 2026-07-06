@@ -114,7 +114,31 @@ test "keycode.from_name navigation keys" {
 
 test "keycode.from_name function keys" {
     try testing.expectEqual(@as(?u8, keycode.f1), keycode.from_name("f1"));
+    try testing.expectEqual(@as(?u8, keycode.f2), keycode.from_name("f2"));
+    try testing.expectEqual(@as(?u8, keycode.f3), keycode.from_name("f3"));
+    try testing.expectEqual(@as(?u8, keycode.f4), keycode.from_name("f4"));
+    try testing.expectEqual(@as(?u8, keycode.f5), keycode.from_name("f5"));
+    try testing.expectEqual(@as(?u8, keycode.f6), keycode.from_name("f6"));
+    try testing.expectEqual(@as(?u8, keycode.f7), keycode.from_name("f7"));
+    try testing.expectEqual(@as(?u8, keycode.f8), keycode.from_name("f8"));
+    try testing.expectEqual(@as(?u8, keycode.f9), keycode.from_name("f9"));
+    try testing.expectEqual(@as(?u8, keycode.f10), keycode.from_name("f10"));
+    try testing.expectEqual(@as(?u8, keycode.f11), keycode.from_name("f11"));
     try testing.expectEqual(@as(?u8, keycode.f12), keycode.from_name("f12"));
+}
+
+test "keycode.from_string function keys" {
+    try testing.expectEqual(@as(?u8, keycode.f5), keycode.from_string("f5"));
+    try testing.expectEqual(@as(?u8, keycode.f10), keycode.from_string("f10"));
+}
+
+test "keycode.to_name function keys" {
+    try testing.expectEqualStrings("F1", keycode.to_name(keycode.f1).?);
+    try testing.expectEqualStrings("F2", keycode.to_name(keycode.f2).?);
+    try testing.expectEqualStrings("F5", keycode.to_name(keycode.f5).?);
+    try testing.expectEqualStrings("F10", keycode.to_name(keycode.f10).?);
+    try testing.expectEqualStrings("F11", keycode.to_name(keycode.f11).?);
+    try testing.expectEqualStrings("F12", keycode.to_name(keycode.f12).?);
 }
 
 test "keycode.from_name editing keys" {
@@ -202,7 +226,30 @@ test "keycode modifier pairs" {
 
 test "keycode function keys" {
     try testing.expectEqual(@as(u8, 0x70), keycode.f1);
+    try testing.expectEqual(@as(u8, 0x71), keycode.f2);
+    try testing.expectEqual(@as(u8, 0x72), keycode.f3);
+    try testing.expectEqual(@as(u8, 0x73), keycode.f4);
+    try testing.expectEqual(@as(u8, 0x74), keycode.f5);
+    try testing.expectEqual(@as(u8, 0x75), keycode.f6);
+    try testing.expectEqual(@as(u8, 0x76), keycode.f7);
+    try testing.expectEqual(@as(u8, 0x77), keycode.f8);
+    try testing.expectEqual(@as(u8, 0x78), keycode.f9);
+    try testing.expectEqual(@as(u8, 0x79), keycode.f10);
+    try testing.expectEqual(@as(u8, 0x7A), keycode.f11);
     try testing.expectEqual(@as(u8, 0x7B), keycode.f12);
+}
+
+test "keycode numpad keys" {
+    try testing.expectEqual(@as(u8, 0x60), keycode.numpad0);
+    try testing.expectEqual(@as(u8, 0x61), keycode.numpad1);
+    try testing.expectEqual(@as(u8, 0x62), keycode.numpad2);
+    try testing.expectEqual(@as(u8, 0x63), keycode.numpad3);
+    try testing.expectEqual(@as(u8, 0x64), keycode.numpad4);
+    try testing.expectEqual(@as(u8, 0x65), keycode.numpad5);
+    try testing.expectEqual(@as(u8, 0x66), keycode.numpad6);
+    try testing.expectEqual(@as(u8, 0x67), keycode.numpad7);
+    try testing.expectEqual(@as(u8, 0x68), keycode.numpad8);
+    try testing.expectEqual(@as(u8, 0x69), keycode.numpad9);
 }
 
 test "keycode oem keys" {

@@ -2,7 +2,7 @@ const std = @import("std");
 
 const key_event = @import("../event/key.zig");
 const response_mod = @import("../response.zig");
-const base_mod = @import("../registry/base.zig");
+const base = @import("../registry/base.zig");
 const entry_mod = @import("../registry/entry.zig");
 
 const Key = key_event.Key;
@@ -11,7 +11,7 @@ const Response = response_mod.Response;
 pub const capacity_default: u32 = 32;
 pub const capacity_max: u32 = 128;
 
-pub const Error = base_mod.BaseError;
+pub const Error = base.BaseError;
 
 pub const Callback = *const fn (context: *anyopaque, key: *const Key) Response;
 
@@ -61,6 +61,11 @@ pub const Entry = struct {
     }
 };
 
+const Invocation = struct {
+    callback: ?Callback,
+    context: ?*anyopaque,
+};
+
 pub fn OneShotRegistry(comptime capacity: u32) type {
     if (capacity == 0) {
         @compileError("OneShotRegistry capacity must be at least 1");
@@ -73,7 +78,9 @@ pub fn OneShotRegistry(comptime capacity: u32) type {
     return struct {
         const Self = @This();
 
-        const Base = base_mod.BaseRegistry(Entry, capacity, .{});
+        const Base = base.BaseRegistry(Entry, capacity, .{
+            .has_mutex = true,
+        });
 
         base: Base = Base.init(),
 
@@ -91,10 +98,14 @@ pub fn OneShotRegistry(comptime capacity: u32) type {
             callback: Callback,
             context: ?*anyopaque,
         ) Error!u32 {
-            std.debug.assert(self.is_valid());
             std.debug.assert(binding_id >= 1);
 
-            const allocation = try self.base.allocate();
+            self.base.lock();
+            defer self.base.unlock();
+
+            std.debug.assert(self.is_valid());
+
+            const allocation = self.base.allocate_locked() catch return error.RegistryFull;
 
             std.debug.assert(allocation.slot < capacity);
             std.debug.assert(allocation.id >= 1);
@@ -119,15 +130,47 @@ pub fn OneShotRegistry(comptime capacity: u32) type {
         }
 
         pub fn unregister(self: *Self, id: u32) Error!void {
-            std.debug.assert(self.is_valid());
             std.debug.assert(id >= 1);
 
-            _ = try self.base.free_by_id(id);
+            self.base.lock();
+            defer self.base.unlock();
+
+            std.debug.assert(self.is_valid());
+
+            _ = try self.base.free_by_id_locked(id);
         }
 
         pub fn process(self: *Self, binding_id: u32, key: *const Key) ?Response {
-            std.debug.assert(self.is_valid());
+            std.debug.assert(binding_id >= 1);
             std.debug.assert(key.is_valid());
+
+            const match = blk: {
+                self.base.lock();
+                defer self.base.unlock();
+
+                std.debug.assert(self.is_valid());
+
+                break :blk self.resolve_locked(binding_id);
+            };
+
+            if (match) |m| {
+                if (m.callback) |callback| {
+                    if (m.context) |context| {
+                        const response = callback(context, key);
+
+                        std.debug.assert(response.is_valid());
+
+                        return response;
+                    }
+                }
+
+                return .consume;
+            }
+
+            return null;
+        }
+
+        fn resolve_locked(self: *Self, binding_id: u32) ?Invocation {
             std.debug.assert(binding_id >= 1);
 
             const entries = self.base.entries();
@@ -147,20 +190,25 @@ pub fn OneShotRegistry(comptime capacity: u32) type {
 
                 e.fired = true;
 
-                if (e.invoke(key)) |response| {
-                    std.debug.assert(response.is_valid());
-                    return response;
-                }
+                std.debug.assert(e.get_callback() != null);
+                std.debug.assert(e.get_context() != null);
 
-                return .consume;
+                return Invocation{
+                    .callback = e.get_callback(),
+                    .context = e.get_context(),
+                };
             }
 
             return null;
         }
 
         pub fn reset(self: *Self, id: u32) Error!void {
-            std.debug.assert(self.is_valid());
             std.debug.assert(id >= 1);
+
+            self.base.lock();
+            defer self.base.unlock();
+
+            std.debug.assert(self.is_valid());
 
             const entry = self.base.get_by_id(id) orelse return error.NotFound;
 
@@ -171,6 +219,9 @@ pub fn OneShotRegistry(comptime capacity: u32) type {
         }
 
         pub fn reset_all(self: *Self) void {
+            self.base.lock();
+            defer self.base.unlock();
+
             std.debug.assert(self.is_valid());
 
             const entries = self.base.entries();
@@ -183,9 +234,13 @@ pub fn OneShotRegistry(comptime capacity: u32) type {
             }
         }
 
-        pub fn is_fired(self: *const Self, id: u32) ?bool {
-            std.debug.assert(self.is_valid());
+        pub fn is_fired(self: *Self, id: u32) ?bool {
             std.debug.assert(id >= 1);
+
+            self.base.lock();
+            defer self.base.unlock();
+
+            std.debug.assert(self.is_valid());
 
             const slot = self.base.find_by_id(id) orelse return null;
 
@@ -193,9 +248,12 @@ pub fn OneShotRegistry(comptime capacity: u32) type {
         }
 
         pub fn clear(self: *Self) void {
+            self.base.lock();
+            defer self.base.unlock();
+
             std.debug.assert(self.is_valid());
 
-            self.base.clear();
+            self.base.clear_locked();
         }
     };
 }

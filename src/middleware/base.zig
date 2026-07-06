@@ -1,10 +1,12 @@
 const std = @import("std");
 
 const key_event = @import("../event/key.zig");
-const response_mod = @import("../response.zig");
+const response = @import("../response.zig");
+
+const Mutex = @import("../mutex.zig").Mutex;
 
 const Key = key_event.Key;
-const Response = response_mod.Response;
+const Response = response.Response;
 
 pub const Next = struct {
     context: *anyopaque,
@@ -51,11 +53,13 @@ pub const Middleware = struct {
 
                 return result;
             }
+
+            const vtable = VTable{ .process = @This().process };
         };
 
         const result = Middleware{
             .pointer = pointer,
-            .vtable = &.{ .process = impl.process },
+            .vtable = &impl.vtable,
         };
 
         return result;
@@ -68,10 +72,11 @@ pub fn Pipeline(comptime capacity: u8) type {
 
         items: [capacity]?Middleware = [_]?Middleware{null} ** capacity,
         count: u8 = 0,
+        mutex: Mutex = .{},
 
-        const ChainContext = struct {
-            pipeline: *Self,
-            index: u8,
+        const Snapshot = struct {
+            items: [capacity]Middleware,
+            count: u8,
             final: *const fn (key: *const Key) Response,
         };
 
@@ -85,13 +90,16 @@ pub fn Pipeline(comptime capacity: u8) type {
         }
 
         pub fn add(self: *Self, comptime T: type, pointer: *T) !u8 {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
             std.debug.assert(self.count <= capacity);
 
             if (self.count >= capacity) {
                 return error.PipelineFull;
             }
 
-            const slot = self.count;
+            const slot = self.find_empty_slot() orelse return error.PipelineFull;
 
             std.debug.assert(slot < capacity);
 
@@ -105,85 +113,131 @@ pub fn Pipeline(comptime capacity: u8) type {
         }
 
         pub fn remove(self: *Self, slot: u8) !void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
             std.debug.assert(self.count <= capacity);
 
-            if (slot >= self.count) {
+            if (slot >= capacity) {
                 return error.InvalidSlot;
             }
 
-            std.debug.assert(slot < self.count);
+            std.debug.assert(slot < capacity);
 
-            var index: u8 = slot;
-            var i: u8 = 0;
-
-            while (i < capacity) : (i += 1) {
-                if (index >= self.count - 1) {
-                    break;
-                }
-
-                self.items[index] = self.items[index + 1];
-                index += 1;
+            if (self.items[slot] == null) {
+                return error.NotFound;
             }
 
-            self.items[self.count - 1] = null;
+            self.items[slot] = null;
             self.count -= 1;
 
             std.debug.assert(self.count <= capacity);
+            std.debug.assert(self.items[slot] == null);
         }
 
-        pub fn process(self: *Self, key: *const Key, final: *const fn (key: *const Key) Response) Response {
+        fn find_empty_slot(self: *const Self) ?u8 {
             std.debug.assert(self.count <= capacity);
-            std.debug.assert(key.is_valid());
 
-            return self.process_at(0, key, final);
-        }
+            var i: u8 = 0;
 
-        fn process_at(self: *Self, index: u8, key: *const Key, final: *const fn (key: *const Key) Response) Response {
-            std.debug.assert(self.count <= capacity);
-            std.debug.assert(key.is_valid());
-            std.debug.assert(index <= self.count);
-
-            var i: u8 = index;
-
-            while (i < self.count) : (i += 1) {
-                std.debug.assert(i < capacity);
-
-                if (self.items[i]) |middleware| {
-                    var chain = ChainContext{
-                        .pipeline = self,
-                        .index = i + 1,
-                        .final = final,
-                    };
-
-                    const next = Next{
-                        .context = &chain,
-                        .call = chain_call,
-                    };
-
-                    const result = middleware.process(key, &next);
-
-                    std.debug.assert(result.is_valid());
-
-                    return result;
+            while (i < capacity) : (i += 1) {
+                if (self.items[i] == null) {
+                    return i;
                 }
             }
 
-            return final(key);
+            std.debug.assert(i == capacity);
+
+            return null;
         }
 
-        fn chain_call(context: *anyopaque, key: *const Key) Response {
+        pub fn process(self: *Self, key: *const Key, final: *const fn (key: *const Key) Response) Response {
             std.debug.assert(key.is_valid());
 
-            const chain: *ChainContext = @ptrCast(@alignCast(context));
+            var snapshot = Snapshot{
+                .items = undefined,
+                .count = 0,
+                .final = final,
+            };
 
-            const result = chain.pipeline.process_at(chain.index, key, chain.final);
+            self.snapshot_items(&snapshot);
+
+            std.debug.assert(snapshot.count <= capacity);
+
+            const result = stage_process(0, &snapshot, key);
 
             std.debug.assert(result.is_valid());
 
             return result;
         }
 
+        fn snapshot_items(self: *Self, snapshot: *Snapshot) void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            std.debug.assert(self.count <= capacity);
+            std.debug.assert(snapshot.count == 0);
+
+            var i: u8 = 0;
+
+            while (i < capacity) : (i += 1) {
+                if (self.items[i]) |middleware| {
+                    std.debug.assert(snapshot.count < capacity);
+
+                    snapshot.items[snapshot.count] = middleware;
+                    snapshot.count += 1;
+                }
+            }
+
+            std.debug.assert(i == capacity);
+            std.debug.assert(snapshot.count == self.count);
+        }
+
+        fn stage_process(comptime index: u8, snapshot: *Snapshot, key: *const Key) Response {
+            std.debug.assert(key.is_valid());
+            std.debug.assert(snapshot.count <= capacity);
+
+            if (index == capacity) {
+                return snapshot.final(key);
+            } else {
+                if (index >= snapshot.count) {
+                    return snapshot.final(key);
+                }
+
+                const next = Next{
+                    .context = snapshot,
+                    .call = stage_call(index + 1),
+                };
+
+                const result = snapshot.items[index].process(key, &next);
+
+                std.debug.assert(result.is_valid());
+
+                return result;
+            }
+        }
+
+        fn stage_call(comptime index: u8) *const fn (context: *anyopaque, key: *const Key) Response {
+            const impl = struct {
+                fn call(context: *anyopaque, key: *const Key) Response {
+                    std.debug.assert(key.is_valid());
+
+                    const snapshot: *Snapshot = @ptrCast(@alignCast(context));
+                    const result = stage_process(index, snapshot, key);
+
+                    std.debug.assert(result.is_valid());
+
+                    return result;
+                }
+            };
+
+            return impl.call;
+        }
+
         pub fn clear(self: *Self) void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
             std.debug.assert(self.count <= capacity);
 
             var i: u8 = 0;

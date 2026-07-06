@@ -3,7 +3,7 @@ const std = @import("std");
 const key_event = @import("../event/key.zig");
 const response_mod = @import("../response.zig");
 const filter_mod = @import("../filter.zig");
-const base_mod = @import("../registry/base.zig");
+const base = @import("../registry/base.zig");
 const entry_mod = @import("../registry/entry.zig");
 
 const Key = key_event.Key;
@@ -14,7 +14,7 @@ pub const capacity_default: u32 = 32;
 pub const capacity_max: u32 = 128;
 pub const toggle_count_max: u32 = 1000000;
 
-pub const Error = base_mod.BaseError;
+pub const Error = base.BaseError;
 
 pub const ActionCallback = *const fn (context: *anyopaque, key: *const Key) Response;
 pub const ToggleCallback = *const fn (context: *anyopaque, enabled: bool) void;
@@ -22,6 +22,17 @@ pub const ToggleCallback = *const fn (context: *anyopaque, enabled: bool) void;
 pub const Options = struct {
     filter: WindowFilter = .{},
     toggle_callback: ?ToggleCallback = null,
+};
+
+const ActionMatch = struct {
+    callback: ?ActionCallback,
+    context: ?*anyopaque,
+};
+
+const ToggleInvocation = struct {
+    callback: ToggleCallback,
+    context: *anyopaque,
+    enabled: bool,
 };
 
 pub const Entry = struct {
@@ -87,7 +98,7 @@ pub fn ToggleRegistry(comptime capacity: u32) type {
     return struct {
         const Self = @This();
 
-        const Base = base_mod.BaseRegistry(Entry, capacity, .{
+        const Base = base.BaseRegistry(Entry, capacity, .{
             .has_mutex = true,
         });
 
@@ -159,10 +170,34 @@ pub fn ToggleRegistry(comptime capacity: u32) type {
             std.debug.assert(binding_id >= 1);
             std.debug.assert(key.is_valid());
 
-            self.base.lock();
-            defer self.base.unlock();
+            const match = blk: {
+                self.base.lock();
+                defer self.base.unlock();
 
-            std.debug.assert(self.is_valid());
+                std.debug.assert(self.is_valid());
+
+                break :blk self.resolve_action_locked(binding_id);
+            };
+
+            if (match) |m| {
+                if (m.callback) |callback| {
+                    if (m.context) |context| {
+                        const response = callback(context, key);
+
+                        std.debug.assert(response.is_valid());
+
+                        return response;
+                    }
+                }
+
+                return .consume;
+            }
+
+            return null;
+        }
+
+        fn resolve_action_locked(self: *Self, binding_id: u32) ?ActionMatch {
+            std.debug.assert(binding_id >= 1);
 
             const entries = self.base.entries();
 
@@ -183,12 +218,12 @@ pub fn ToggleRegistry(comptime capacity: u32) type {
                     continue;
                 }
 
-                if (e.invoke_action(key)) |response| {
-                    std.debug.assert(response.is_valid());
-                    return response;
-                }
+                std.debug.assert(e.get_context() != null);
 
-                return .consume;
+                return ActionMatch{
+                    .callback = e.base.get_callback(),
+                    .context = e.base.get_context(),
+                };
             }
 
             return null;
@@ -197,25 +232,51 @@ pub fn ToggleRegistry(comptime capacity: u32) type {
         pub fn process_toggle(self: *Self, binding_id: u32) void {
             std.debug.assert(binding_id >= 1);
 
-            self.base.lock();
-            defer self.base.unlock();
+            var invocations: [capacity]ToggleInvocation = undefined;
+            var invocation_count: u32 = 0;
 
-            std.debug.assert(self.is_valid());
+            {
+                self.base.lock();
+                defer self.base.unlock();
 
-            const entries = self.base.entries();
+                std.debug.assert(self.is_valid());
 
-            for (entries) |*entry| {
-                if (!entry.is_active()) {
-                    continue;
+                const entries = self.base.entries();
+
+                for (entries) |*entry| {
+                    if (!entry.is_active()) {
+                        continue;
+                    }
+
+                    if (entry.base.toggle_binding_id != binding_id) {
+                        continue;
+                    }
+
+                    entry.base.enabled = !entry.base.enabled;
+
+                    if (entry.toggle_count < toggle_count_max) {
+                        entry.toggle_count += 1;
+                    }
+
+                    if (entry.toggle_callback) |callback| {
+                        if (entry.base.get_context()) |context| {
+                            std.debug.assert(invocation_count < capacity);
+
+                            invocations[invocation_count] = ToggleInvocation{
+                                .callback = callback,
+                                .context = context,
+                                .enabled = entry.base.enabled,
+                            };
+                            invocation_count += 1;
+                        }
+                    }
                 }
+            }
 
-                if (entry.base.toggle_binding_id != binding_id) {
-                    continue;
-                }
+            std.debug.assert(invocation_count <= capacity);
 
-                entry.base.enabled = !entry.base.enabled;
-                entry.toggle_count += 1;
-                entry.invoke_toggle();
+            for (invocations[0..invocation_count]) |inv| {
+                inv.callback(inv.context, inv.enabled);
             }
         }
 

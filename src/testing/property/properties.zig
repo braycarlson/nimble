@@ -236,7 +236,7 @@ pub fn property_modifier_set_equality() !void {
 
         const mods1 = modifier.Set{ .flags = flags1 };
         const mods2 = modifier.Set{ .flags = flags2 };
-        const are_equal = mods1.equals(&mods2);
+        const are_equal = mods1.eql(&mods2);
         const flags_equal = flags1 == flags2;
 
         std.debug.assert(are_equal == flags_equal);
@@ -348,10 +348,10 @@ pub fn property_binding_id_unique() !void {
         std.debug.assert(binding2.is_valid());
 
         const same_key = key1 == key2;
-        const same_mods = mods1.equals(&mods2);
+        const same_mods = mods1.eql(&mods2);
 
         if (!same_key or !same_mods) {
-            std.debug.assert(!binding1.equals(&binding2));
+            std.debug.assert(!binding1.eql(&binding2));
         }
 
         iteration += 1;

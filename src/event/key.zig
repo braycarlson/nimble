@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const w32 = @import("win32").everything;
+const win32 = @import("win32").everything;
 
 const keycode = @import("../keycode.zig");
 const modifier = @import("../modifier.zig");
@@ -56,9 +56,9 @@ pub const Key = struct {
         return self.modifiers.win();
     }
 
-    pub fn parse(wparam: w32.WPARAM, lparam: w32.LPARAM) ?Key {
-        std.debug.assert(@sizeOf(w32.WPARAM) >= 4);
-        std.debug.assert(@sizeOf(w32.LPARAM) >= 4);
+    pub fn parse(wparam: win32.WPARAM, lparam: win32.LPARAM) ?Key {
+        std.debug.assert(@sizeOf(win32.WPARAM) >= 4);
+        std.debug.assert(@sizeOf(win32.LPARAM) >= 4);
 
         const data = extract(lparam) orelse return null;
 
@@ -95,8 +95,8 @@ pub const Key = struct {
         return result;
     }
 
-    fn extract(lparam: w32.LPARAM) ?*w32.KBDLLHOOKSTRUCT {
-        std.debug.assert(@sizeOf(w32.LPARAM) == @sizeOf(u64) or @sizeOf(w32.LPARAM) == @sizeOf(u32));
+    fn extract(lparam: win32.LPARAM) ?*win32.KBDLLHOOKSTRUCT {
+        std.debug.assert(@sizeOf(win32.LPARAM) == @sizeOf(u64) or @sizeOf(win32.LPARAM) == @sizeOf(u32));
 
         if (lparam == 0) {
             return null;
@@ -109,11 +109,11 @@ pub const Key = struct {
         return @ptrFromInt(address);
     }
 
-    pub fn from_lparam(lparam: w32.LPARAM) ?*w32.KBDLLHOOKSTRUCT {
+    pub fn from_lparam(lparam: win32.LPARAM) ?*win32.KBDLLHOOKSTRUCT {
         return extract(lparam);
     }
 
-    fn is_keycode_valid(data: *w32.KBDLLHOOKSTRUCT) bool {
+    fn is_keycode_valid(data: *win32.KBDLLHOOKSTRUCT) bool {
         std.debug.assert(keycode.value_min == 0x01);
         std.debug.assert(keycode.value_max == 0xFE);
 
@@ -123,11 +123,11 @@ pub const Key = struct {
         return above and below;
     }
 
-    fn is_down(wparam: w32.WPARAM) bool {
+    fn is_down(wparam: win32.WPARAM) bool {
         std.debug.assert(wparam != 0);
 
-        const is_keydown = wparam == w32.WM_KEYDOWN;
-        const is_syskeydown = wparam == w32.WM_SYSKEYDOWN;
+        const is_keydown = wparam == win32.WM_KEYDOWN;
+        const is_syskeydown = wparam == win32.WM_SYSKEYDOWN;
 
         return is_keydown or is_syskeydown;
     }

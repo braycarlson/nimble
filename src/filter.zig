@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const w32 = @import("win32").everything;
+const win32 = @import("win32").everything;
 
 const window = @import("window.zig");
 
@@ -162,7 +162,7 @@ pub const WindowFilter = struct {
     pub fn matches(self: *const WindowFilter) bool {
         std.debug.assert(self.is_valid());
 
-        const hwnd = w32.GetForegroundWindow() orelse return self.mode == .exclude;
+        const hwnd = win32.GetForegroundWindow() orelse return self.mode == .exclude;
 
         if (!self.check_fullscreen_mode(hwnd)) {
             return false;
@@ -185,7 +185,7 @@ pub const WindowFilter = struct {
         };
     }
 
-    fn check_fullscreen_mode(self: *const WindowFilter, hwnd: w32.HWND) bool {
+    fn check_fullscreen_mode(self: *const WindowFilter, hwnd: win32.HWND) bool {
         if (self.fullscreen_mode == .any) {
             return true;
         }
@@ -199,7 +199,7 @@ pub const WindowFilter = struct {
         };
     }
 
-    fn check_maximized_mode(self: *const WindowFilter, hwnd: w32.HWND) bool {
+    fn check_maximized_mode(self: *const WindowFilter, hwnd: win32.HWND) bool {
         if (self.maximized_mode == .any) {
             return true;
         }
@@ -213,7 +213,7 @@ pub const WindowFilter = struct {
         };
     }
 
-    fn match_window(self: *const WindowFilter, hwnd: w32.HWND) bool {
+    fn match_window(self: *const WindowFilter, hwnd: win32.HWND) bool {
         if (self.class_len > 0) {
             if (self.match_class(hwnd)) {
                 return true;
@@ -229,7 +229,7 @@ pub const WindowFilter = struct {
         return false;
     }
 
-    fn match_class(self: *const WindowFilter, hwnd: w32.HWND) bool {
+    fn match_class(self: *const WindowFilter, hwnd: win32.HWND) bool {
         std.debug.assert(self.class_len > 0);
         std.debug.assert(self.class_len <= length_max);
 
@@ -238,7 +238,7 @@ pub const WindowFilter = struct {
         return window.class_matches(hwnd, target);
     }
 
-    fn match_title(self: *const WindowFilter, hwnd: w32.HWND) bool {
+    fn match_title(self: *const WindowFilter, hwnd: win32.HWND) bool {
         std.debug.assert(self.title_len > 0);
         std.debug.assert(self.title_len <= length_max);
 

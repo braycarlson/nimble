@@ -1,9 +1,9 @@
 const std = @import("std");
 
-const w32 = @import("win32").everything;
+const win32 = @import("win32").everything;
 
-const base_mod = @import("base.zig");
-const entry_mod = @import("entry.zig");
+const base = @import("base.zig");
+const entry = @import("entry.zig");
 
 pub const capacity_default: u32 = 32;
 pub const capacity_max: u32 = 128;
@@ -11,27 +11,29 @@ pub const interval_min_ms: u32 = 10;
 pub const interval_max_ms: u32 = 86400000;
 pub const tick_interval_ms: u32 = 10;
 
-pub const Error = base_mod.BaseError || error{
+pub const Error = base.BaseError || error{
     AlreadyActive,
     InvalidValue,
     NotActive,
     SetupFailed,
 };
 
-var global_instance: ?*anyopaque = null;
-var global_timer_id: ?usize = null;
-var global_tick_fn: ?*const fn () void = null;
+var global_instance: std.atomic.Value(?*anyopaque) = std.atomic.Value(?*anyopaque).init(null);
+var global_timer_id: std.atomic.Value(usize) = std.atomic.Value(usize).init(0);
+var global_tick_fn: std.atomic.Value(?*const fn () void) = std.atomic.Value(?*const fn () void).init(null);
 
-fn timer_callback(_: w32.HWND, _: u32, _: usize, _: u32) callconv(.c) void {
-    if (global_tick_fn) |tick_fn| {
-        tick_fn();
+fn timer_callback(_: win32.HWND, _: u32, _: usize, _: u32) callconv(.c) void {
+    const tick_fn = global_tick_fn.load(.acquire);
+
+    if (tick_fn) |f| {
+        f();
     }
 }
 
 pub const Callback = *const fn (context: *anyopaque) void;
 
 pub const Entry = struct {
-    base: entry_mod.BaseEntry(Callback) = .{},
+    base: entry.BaseEntry(Callback) = .{},
     binding_id: u32 = 0,
     interval_ms: u32 = 1000,
     repeat: bool = true,
@@ -89,7 +91,7 @@ pub fn TimerRegistry(comptime capacity: u32) type {
     return struct {
         const Self = @This();
 
-        const Base = base_mod.BaseRegistry(Entry, capacity, .{
+        const Base = base.BaseRegistry(Entry, capacity, .{
             .has_mutex = true,
         });
 
@@ -104,30 +106,53 @@ pub fn TimerRegistry(comptime capacity: u32) type {
         }
 
         pub fn set_global(self: *Self) void {
-            global_instance = self;
-            global_tick_fn = @ptrCast(&Self.tick_static);
+            const owner = global_instance.load(.acquire);
+            const self_ptr: *anyopaque = @ptrCast(self);
 
-            if (global_timer_id == null) {
-                global_timer_id = w32.SetTimer(null, 0, tick_interval_ms, @ptrCast(&timer_callback));
+            std.debug.assert(owner == null or owner == self_ptr);
+
+            global_instance.store(self_ptr, .release);
+            global_tick_fn.store(&Self.tick_static, .release);
+
+            if (global_timer_id.load(.acquire) == 0) {
+                const timer_id = win32.SetTimer(null, 0, tick_interval_ms, @ptrCast(&timer_callback));
+
+                global_timer_id.store(timer_id, .release);
             }
+
+            std.debug.assert(global_instance.load(.acquire) == self_ptr);
         }
 
         fn tick_static() void {
-            if (global_instance) |ptr| {
+            const instance = global_instance.load(.acquire);
+
+            if (instance) |ptr| {
                 const self: *Self = @ptrCast(@alignCast(ptr));
 
                 self.tick();
             }
         }
 
-        pub fn clear_global(_: *Self) void {
-            if (global_timer_id) |id| {
-                _ = w32.KillTimer(null, id);
-                global_timer_id = null;
+        pub fn clear_global(self: *Self) void {
+            const owner = global_instance.load(.acquire);
+
+            if (owner == null) {
+                return;
             }
 
-            global_instance = null;
-            global_tick_fn = null;
+            const self_ptr: *anyopaque = @ptrCast(self);
+
+            std.debug.assert(owner == self_ptr);
+
+            const timer_id = global_timer_id.load(.acquire);
+
+            if (timer_id != 0) {
+                _ = win32.KillTimer(null, timer_id);
+            }
+
+            global_timer_id.store(0, .release);
+            global_tick_fn.store(null, .release);
+            global_instance.store(null, .release);
         }
 
         pub fn register(
@@ -137,14 +162,14 @@ pub fn TimerRegistry(comptime capacity: u32) type {
             context: ?*anyopaque,
             options: Options,
         ) Error!u32 {
-            std.debug.assert(self.is_valid());
-
             if (interval_ms < interval_min_ms or interval_ms > interval_max_ms) {
                 return Error.InvalidValue;
             }
 
             self.base.lock();
             defer self.base.unlock();
+
+            std.debug.assert(self.is_valid());
 
             const allocation = self.base.allocate_locked() catch return error.RegistryFull;
 
@@ -194,7 +219,7 @@ pub fn TimerRegistry(comptime capacity: u32) type {
             }
 
             self.base.slot.entries[slot].running = true;
-            self.base.slot.entries[slot].last_tick = @intCast(w32.GetTickCount64());
+            self.base.slot.entries[slot].last_tick = @intCast(win32.GetTickCount64());
         }
 
         pub fn stop(self: *Self, id: u32) Error!void {
@@ -274,7 +299,7 @@ pub fn TimerRegistry(comptime capacity: u32) type {
                     if (!e.running) {
                         e.running = true;
                         e.fired = false;
-                        e.last_tick = @intCast(w32.GetTickCount64());
+                        e.last_tick = @intCast(win32.GetTickCount64());
                     }
                 } else {
                     e.running = false;
@@ -285,14 +310,14 @@ pub fn TimerRegistry(comptime capacity: u32) type {
         pub fn tick(self: *Self) void {
             std.debug.assert(self.is_valid());
 
-            var pending: [capacity_max]struct { callback: Callback, context: ?*anyopaque } = undefined;
+            var pending: [capacity]struct { callback: Callback, context: ?*anyopaque } = undefined;
             var pending_count: u32 = 0;
 
             {
                 self.base.lock();
                 defer self.base.unlock();
 
-                const now: i64 = @intCast(w32.GetTickCount64());
+                const now: i64 = @intCast(win32.GetTickCount64());
                 const entries = self.base.entries();
 
                 for (entries) |*e| {
@@ -313,13 +338,13 @@ pub fn TimerRegistry(comptime capacity: u32) type {
 
                     if (elapsed >= e.interval_ms) {
                         if (e.get_callback()) |cb| {
-                            if (pending_count < capacity_max) {
-                                pending[pending_count] = .{
-                                    .callback = cb,
-                                    .context = e.get_context(),
-                                };
-                                pending_count += 1;
-                            }
+                            std.debug.assert(pending_count < capacity);
+
+                            pending[pending_count] = .{
+                                .callback = cb,
+                                .context = e.get_context(),
+                            };
+                            pending_count += 1;
                         }
 
                         e.fired = true;
@@ -332,7 +357,7 @@ pub fn TimerRegistry(comptime capacity: u32) type {
                 }
             }
 
-            std.debug.assert(pending_count <= capacity_max);
+            std.debug.assert(pending_count <= capacity);
 
             for (pending[0..pending_count]) |p| {
                 if (p.context) |ctx| {

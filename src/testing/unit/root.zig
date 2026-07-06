@@ -15,6 +15,7 @@ pub const buffer = struct {
 };
 
 pub const builder = struct {
+    pub const keyboard = @import("builder/keyboard.zig");
     pub const pattern = @import("builder/pattern.zig");
 };
 
@@ -37,12 +38,20 @@ pub const registry = struct {
     pub const entry = @import("registry/entry.zig");
     pub const key = @import("registry/key.zig");
     pub const mouse = @import("registry/mouse.zig");
+    pub const sequence = @import("registry/sequence.zig");
     pub const slot = @import("registry/slot.zig");
     pub const timer = @import("registry/timer.zig");
 };
 
+pub const simulate = struct {
+    pub const message = @import("simulate/message.zig");
+    pub const mouse = @import("simulate/mouse.zig");
+    pub const text = @import("simulate/text.zig");
+};
+
 pub const binding = @import("binding.zig");
 pub const character = @import("character.zig");
+pub const clipboard = @import("clipboard.zig");
 pub const event_root = @import("event.zig");
 pub const filter = @import("filter.zig");
 pub const hook = @import("hook.zig");
@@ -51,6 +60,7 @@ pub const modifier = @import("modifier.zig");
 pub const response = @import("response.zig");
 pub const root = @import("root.zig");
 pub const state = @import("state.zig");
+pub const surface = @import("surface.zig");
 pub const timer = @import("timer.zig");
 
 test {
@@ -64,10 +74,16 @@ test {
     _ = buffer.circular;
     _ = buffer.rolling;
 
+    _ = builder.keyboard;
     _ = builder.pattern;
 
     _ = event.key;
     _ = event.mouse;
+
+    _ = middleware.base;
+    _ = middleware.blocklist;
+    _ = middleware.logging;
+    _ = middleware.remap;
 
     _ = registry.base;
     _ = registry.chord;
@@ -75,11 +91,17 @@ test {
     _ = registry.entry;
     _ = registry.key;
     _ = registry.mouse;
+    _ = registry.sequence;
     _ = registry.slot;
     _ = registry.timer;
 
+    _ = simulate.message;
+    _ = simulate.mouse;
+    _ = simulate.text;
+
     _ = binding;
     _ = character;
+    _ = clipboard;
     _ = event_root;
     _ = filter;
     _ = hook;
@@ -88,5 +110,6 @@ test {
     _ = response;
     _ = root;
     _ = state;
+    _ = surface;
     _ = timer;
 }

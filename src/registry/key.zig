@@ -2,20 +2,20 @@ const std = @import("std");
 
 const key_event = @import("../event/key.zig");
 const modifier = @import("../modifier.zig");
-const response_mod = @import("../response.zig");
+const response = @import("../response.zig");
 const filter_mod = @import("../filter.zig");
-const base_mod = @import("base.zig");
+const base = @import("base.zig");
 const entry_mod = @import("entry.zig");
 
 const Key = key_event.Key;
-const Response = response_mod.Response;
+const Response = response.Response;
 const WindowFilter = filter_mod.WindowFilter;
 
 pub const lookup_size: u32 = 256 * 16;
 pub const capacity_default: u32 = 128;
 pub const capacity_max: u32 = 1024;
 
-pub const Error = base_mod.BaseError || error{
+pub const Error = base.BaseError || error{
     AlreadyRegistered,
     InvalidSlot,
 };
@@ -90,7 +90,7 @@ pub fn KeyRegistry(comptime capacity: u32) type {
     return struct {
         const Self = @This();
 
-        const Base = base_mod.BaseRegistry(Entry, capacity, .{
+        const Base = base.BaseRegistry(Entry, capacity, .{
             .has_mutex = true,
             .has_paused = true,
         });

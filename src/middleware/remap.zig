@@ -1,12 +1,15 @@
 const std = @import("std");
 
 const key_event = @import("../event/key.zig");
+const keycode = @import("../keycode.zig");
 const modifier = @import("../modifier.zig");
-const response_mod = @import("../response.zig");
+const response = @import("../response.zig");
 const base = @import("base.zig");
 
+const Mutex = @import("../mutex.zig").Mutex;
+
 const Key = key_event.Key;
-const Response = response_mod.Response;
+const Response = response.Response;
 const Next = base.Next;
 
 pub const Mapping = struct {
@@ -22,6 +25,7 @@ pub fn RemapMiddleware(comptime capacity: u32) type {
 
         mappings: [capacity]?Mapping = [_]?Mapping{null} ** capacity,
         count: u32 = 0,
+        mutex: Mutex = .{},
 
         pub fn init() Self {
             const result = Self{};
@@ -33,9 +37,21 @@ pub fn RemapMiddleware(comptime capacity: u32) type {
         }
 
         pub fn add(self: *Self, mapping: Mapping) !u32 {
-            std.debug.assert(self.count <= capacity);
             std.debug.assert(mapping.from_modifiers.flags <= modifier.flag_all);
             std.debug.assert(mapping.to_modifiers.flags <= modifier.flag_all);
+
+            if (!keycode.is_valid(mapping.from_key)) {
+                return error.InvalidKey;
+            }
+
+            if (!keycode.is_valid(mapping.to_key)) {
+                return error.InvalidKey;
+            }
+
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            std.debug.assert(self.count <= capacity);
 
             if (self.count >= capacity) {
                 return error.RemapFull;
@@ -55,6 +71,9 @@ pub fn RemapMiddleware(comptime capacity: u32) type {
         }
 
         pub fn remove(self: *Self, slot: u32) !void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
             std.debug.assert(self.count <= capacity);
 
             if (slot >= capacity) {
@@ -74,28 +93,45 @@ pub fn RemapMiddleware(comptime capacity: u32) type {
         }
 
         pub fn process(self: *Self, key: *const Key, next: *const Next) Response {
-            std.debug.assert(self.count <= capacity);
             std.debug.assert(key.is_valid());
+
+            const found = self.find_mapping(key);
+
+            if (found) |mapping| {
+                var remapped = key.*;
+
+                remapped.value = mapping.to_key;
+                remapped.modifiers = mapping.to_modifiers;
+
+                std.debug.assert(remapped.is_valid());
+
+                return next.invoke(&remapped);
+            }
+
+            return next.invoke(key);
+        }
+
+        fn find_mapping(self: *Self, key: *const Key) ?Mapping {
+            std.debug.assert(key.is_valid());
+
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            std.debug.assert(self.count <= capacity);
 
             var i: u32 = 0;
 
             while (i < capacity) : (i += 1) {
                 if (self.mappings[i]) |mapping| {
                     if (self.matches(key, &mapping)) {
-                        var remapped = key.*;
-
-                        remapped.value = mapping.to_key;
-
-                        std.debug.assert(remapped.is_valid());
-
-                        return next.invoke(&remapped);
+                        return mapping;
                     }
                 }
             }
 
             std.debug.assert(i == capacity);
 
-            return next.invoke(key);
+            return null;
         }
 
         fn matches(_: *Self, key: *const Key, mapping: *const Mapping) bool {
@@ -106,7 +142,7 @@ pub fn RemapMiddleware(comptime capacity: u32) type {
                 return false;
             }
 
-            return true;
+            return key.modifiers.eql(&mapping.from_modifiers);
         }
 
         fn find_empty_slot(self: *const Self) ?u32 {
@@ -126,6 +162,9 @@ pub fn RemapMiddleware(comptime capacity: u32) type {
         }
 
         pub fn clear(self: *Self) void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
             std.debug.assert(self.count <= capacity);
 
             var i: u32 = 0;

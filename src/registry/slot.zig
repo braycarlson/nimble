@@ -66,7 +66,14 @@ pub fn SlotManager(comptime Entry: type, comptime capacity: u32) type {
 
             const id = self.id_next;
 
-            self.id_next = if (self.id_next < id_max) self.id_next + 1 else id_min;
+            if (self.id_next < id_max) {
+                self.id_next += 1;
+            } else {
+                self.id_next = id_min;
+
+                std.debug.assert(self.find_by_id(self.id_next) == null);
+            }
+
             self.count += 1;
 
             std.debug.assert(self.count <= capacity);
@@ -92,7 +99,7 @@ pub fn SlotManager(comptime Entry: type, comptime capacity: u32) type {
             self.count -= 1;
 
             std.debug.assert(!self.entries[slot].is_active());
-            std.debug.assert(self.count < capacity or self.count == 0);
+            std.debug.assert(self.find_by_id(id) == null);
 
             return slot;
         }

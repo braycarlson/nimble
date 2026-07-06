@@ -267,3 +267,127 @@ test "pattern.parse modifier order independent" {
     try testing.expect(result2.modifiers.ctrl());
     try testing.expect(result2.modifiers.alt());
 }
+
+test "pattern.parse control spelling" {
+    const result = comptime parse("Control+C");
+
+    try testing.expectEqual(@as(u8, 'C'), result.key);
+    try testing.expect(result.modifiers.ctrl());
+    try testing.expect(!result.modifiers.alt());
+}
+
+test "pattern.parse control lowercase" {
+    const result = comptime parse("control+C");
+
+    try testing.expectEqual(@as(u8, 'C'), result.key);
+    try testing.expect(result.modifiers.ctrl());
+}
+
+test "pattern.parse modifier case insensitive" {
+    const result = comptime parse("CTRL+SHIFT+C");
+
+    try testing.expectEqual(@as(u8, 'C'), result.key);
+    try testing.expect(result.modifiers.ctrl());
+    try testing.expect(result.modifiers.shift());
+}
+
+test "pattern.parse windows spelling" {
+    const result = comptime parse("Windows+D");
+
+    try testing.expectEqual(@as(u8, 'D'), result.key);
+    try testing.expect(result.modifiers.win());
+    try testing.expect(!result.modifiers.ctrl());
+}
+
+test "pattern.parse meta spelling" {
+    const result = comptime parse("Meta+D");
+
+    try testing.expectEqual(@as(u8, 'D'), result.key);
+    try testing.expect(result.modifiers.win());
+    try testing.expect(!result.modifiers.shift());
+}
+
+test "pattern.parse semicolon" {
+    const result = comptime parse(";");
+
+    try testing.expectEqual(keycode.oem_1, result.key);
+    try testing.expect(result.modifiers.none());
+}
+
+test "pattern.parse slash" {
+    const result = comptime parse("/");
+
+    try testing.expectEqual(keycode.oem_2, result.key);
+    try testing.expect(result.modifiers.none());
+}
+
+test "pattern.parse backtick" {
+    const result = comptime parse("`");
+
+    try testing.expectEqual(keycode.oem_3, result.key);
+    try testing.expect(result.modifiers.none());
+}
+
+test "pattern.parse brackets" {
+    const open = comptime parse("[");
+    const close = comptime parse("]");
+
+    try testing.expectEqual(keycode.oem_4, open.key);
+    try testing.expectEqual(keycode.oem_6, close.key);
+}
+
+test "pattern.parse backslash" {
+    const result = comptime parse("\\");
+
+    try testing.expectEqual(keycode.oem_5, result.key);
+    try testing.expect(result.modifiers.none());
+}
+
+test "pattern.parse apostrophe" {
+    const result = comptime parse("'");
+
+    try testing.expectEqual(keycode.oem_7, result.key);
+    try testing.expect(result.modifiers.none());
+}
+
+test "pattern.parse equals" {
+    const result = comptime parse("=");
+
+    try testing.expectEqual(keycode.oem_plus, result.key);
+    try testing.expect(result.modifiers.none());
+}
+
+test "pattern.parse comma" {
+    const result = comptime parse(",");
+
+    try testing.expectEqual(keycode.oem_comma, result.key);
+    try testing.expect(result.modifiers.none());
+}
+
+test "pattern.parse minus" {
+    const result = comptime parse("-");
+
+    try testing.expectEqual(keycode.oem_minus, result.key);
+    try testing.expect(result.modifiers.none());
+}
+
+test "pattern.parse period" {
+    const result = comptime parse(".");
+
+    try testing.expectEqual(keycode.oem_period, result.key);
+    try testing.expect(result.modifiers.none());
+}
+
+test "pattern.parse punctuation with modifier" {
+    const result = comptime parse("Ctrl+;");
+
+    try testing.expectEqual(keycode.oem_1, result.key);
+    try testing.expect(result.modifiers.ctrl());
+}
+
+test "pattern.parse f5" {
+    const result = comptime parse("Ctrl+F5");
+
+    try testing.expectEqual(keycode.f5, result.key);
+    try testing.expect(result.modifiers.ctrl());
+}

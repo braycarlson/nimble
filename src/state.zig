@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const w32 = @import("win32").everything;
+const win32 = @import("win32").everything;
 
 const keycode = @import("keycode.zig");
 const modifier = @import("modifier.zig");
@@ -26,12 +26,7 @@ pub const Keyboard = struct {
     }
 
     pub fn is_valid(self: *const Keyboard) bool {
-        const valid_count = self.active_count <= active_count_max;
-
-        const valid_flags = self.flags[0] <= std.math.maxInt(u128) and
-            self.flags[1] <= std.math.maxInt(u128);
-
-        return valid_count and valid_flags;
+        return self.active_count <= active_count_max;
     }
 
     pub fn clear(self: *Keyboard) void {
@@ -113,7 +108,14 @@ pub const Keyboard = struct {
         std.debug.assert(value <= keycode.value_max);
 
         if (!self.is_down(value)) {
-            self.add_active_key(value);
+            const tracked = self.add_active_key(value);
+
+            if (!tracked) {
+                std.debug.assert(self.active_count == active_count_max);
+                std.debug.assert(!self.is_down(value));
+
+                return;
+            }
         }
 
         self.set_bit(value);
@@ -154,7 +156,7 @@ pub const Keyboard = struct {
             std.debug.assert(key >= keycode.value_min);
             std.debug.assert(key <= keycode.value_max);
 
-            const state = w32.GetAsyncKeyState(@intCast(key));
+            const state = win32.GetAsyncKeyState(@intCast(key));
             const down = state < 0;
 
             if (!down) {
@@ -167,13 +169,13 @@ pub const Keyboard = struct {
         std.debug.assert(self.is_valid());
     }
 
-    fn add_active_key(self: *Keyboard, value: u8) void {
+    fn add_active_key(self: *Keyboard, value: u8) bool {
         std.debug.assert(self.is_valid());
         std.debug.assert(value >= keycode.value_min);
         std.debug.assert(value <= keycode.value_max);
 
         if (self.active_count >= active_count_max) {
-            return;
+            return false;
         }
 
         std.debug.assert(self.active_count < active_count_max);
@@ -182,6 +184,9 @@ pub const Keyboard = struct {
         self.active_count += 1;
 
         std.debug.assert(self.active_count <= active_count_max);
+        std.debug.assert(self.keys_active[self.active_count - 1] == value);
+
+        return true;
     }
 
     fn clear_bit(self: *Keyboard, value: u8) void {

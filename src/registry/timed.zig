@@ -1,10 +1,10 @@
 const std = @import("std");
 
-const w32 = @import("win32").everything;
+const win32 = @import("win32").everything;
 
 const key_event = @import("../event/key.zig");
 const response_mod = @import("../response.zig");
-const base_mod = @import("../registry/base.zig");
+const base = @import("../registry/base.zig");
 const entry_mod = @import("../registry/entry.zig");
 
 const Key = key_event.Key;
@@ -15,7 +15,7 @@ pub const capacity_max: u32 = 128;
 pub const duration_max_ms: u64 = 86400000;
 pub const count_max: u32 = 1000000;
 
-pub const Error = base_mod.BaseError || error{
+pub const Error = base.BaseError || error{
     AlreadyActive,
     InvalidValue,
     NotActive,
@@ -105,13 +105,18 @@ pub const Entry = struct {
                     return false;
                 }
 
-                const now: i64 = @intCast(w32.GetTickCount64());
+                const now: i64 = @intCast(win32.GetTickCount64());
+
+                if (now <= self.start_time) {
+                    return true;
+                }
+
                 const elapsed: u64 = @intCast(now - self.start_time);
 
                 return elapsed < self.duration_ms;
             },
             .until_time => {
-                const now: i64 = @intCast(w32.GetTickCount64());
+                const now: i64 = @intCast(win32.GetTickCount64());
                 return now < self.end_time;
             },
             .toggle => {
@@ -158,6 +163,11 @@ pub const Options = struct {
     }
 };
 
+const Invocation = struct {
+    callback: ?Callback,
+    context: ?*anyopaque,
+};
+
 pub fn TimedRegistry(comptime capacity: u32) type {
     if (capacity == 0) {
         @compileError("TimedRegistry capacity must be at least 1");
@@ -170,7 +180,9 @@ pub fn TimedRegistry(comptime capacity: u32) type {
     return struct {
         const Self = @This();
 
-        const Base = base_mod.BaseRegistry(Entry, capacity, .{});
+        const Base = base.BaseRegistry(Entry, capacity, .{
+            .has_mutex = true,
+        });
 
         base: Base = Base.init(),
 
@@ -189,18 +201,22 @@ pub fn TimedRegistry(comptime capacity: u32) type {
             context: ?*anyopaque,
             options: Options,
         ) Error!u32 {
-            std.debug.assert(self.is_valid());
             std.debug.assert(binding_id >= 1);
 
             if (options.mode == .duration and (options.duration_ms == 0 or options.duration_ms > duration_max_ms)) {
                 return Error.InvalidValue;
             }
 
-            if (options.mode == .count_limited and options.count_limit == 0) {
+            if (options.mode == .count_limited and (options.count_limit == 0 or options.count_limit > count_max)) {
                 return Error.InvalidValue;
             }
 
-            const allocation = try self.base.allocate();
+            self.base.lock();
+            defer self.base.unlock();
+
+            std.debug.assert(self.is_valid());
+
+            const allocation = self.base.allocate_locked() catch return Error.RegistryFull;
 
             std.debug.assert(allocation.slot < capacity);
             std.debug.assert(allocation.id >= 1);
@@ -223,7 +239,7 @@ pub fn TimedRegistry(comptime capacity: u32) type {
                 .end_time = options.end_time,
                 .count_limit = options.count_limit,
                 .expired = false,
-                .start_time = if (options.mode == .until_time) @intCast(w32.GetTickCount64()) else 0,
+                .start_time = if (options.mode == .until_time) @intCast(win32.GetTickCount64()) else 0,
                 .count_current = 0,
             };
 
@@ -233,16 +249,48 @@ pub fn TimedRegistry(comptime capacity: u32) type {
         }
 
         pub fn unregister(self: *Self, id: u32) Error!void {
-            std.debug.assert(self.is_valid());
             std.debug.assert(id >= 1);
 
-            _ = self.base.free_by_id(id) catch return error.NotFound;
+            self.base.lock();
+            defer self.base.unlock();
+
+            std.debug.assert(self.is_valid());
+
+            _ = self.base.free_by_id_locked(id) catch return error.NotFound;
         }
 
         pub fn process(self: *Self, binding_id: u32, key: *const Key) ?Response {
-            std.debug.assert(self.is_valid());
             std.debug.assert(binding_id >= 1);
             std.debug.assert(key.is_valid());
+
+            const match = blk: {
+                self.base.lock();
+                defer self.base.unlock();
+
+                std.debug.assert(self.is_valid());
+
+                break :blk self.resolve_locked(binding_id);
+            };
+
+            if (match) |m| {
+                if (m.callback) |callback| {
+                    if (m.context) |context| {
+                        const response = callback(context, key);
+
+                        std.debug.assert(response.is_valid());
+
+                        return response;
+                    }
+                }
+
+                return .consume;
+            }
+
+            return null;
+        }
+
+        fn resolve_locked(self: *Self, binding_id: u32) ?Invocation {
+            std.debug.assert(binding_id >= 1);
 
             const entries = self.base.entries();
 
@@ -267,27 +315,31 @@ pub fn TimedRegistry(comptime capacity: u32) type {
                     }
                 }
 
-                if (e.invoke(key)) |response| {
-                    std.debug.assert(response.is_valid());
-                    return response;
-                }
+                std.debug.assert(e.count_current <= count_max);
 
-                return .consume;
+                return Invocation{
+                    .callback = e.get_callback(),
+                    .context = e.get_context(),
+                };
             }
 
             return null;
         }
 
         pub fn start(self: *Self, id: u32) Error!void {
-            std.debug.assert(self.is_valid());
             std.debug.assert(id >= 1);
+
+            self.base.lock();
+            defer self.base.unlock();
+
+            std.debug.assert(self.is_valid());
 
             const entry = self.base.get_by_id(id) orelse return error.NotFound;
 
             std.debug.assert(entry.is_active());
 
             if (entry.mode == .duration) {
-                entry.start_time = @intCast(w32.GetTickCount64());
+                entry.start_time = @intCast(win32.GetTickCount64());
             }
 
             entry.set_enabled(true);
@@ -296,8 +348,12 @@ pub fn TimedRegistry(comptime capacity: u32) type {
         }
 
         pub fn stop(self: *Self, id: u32) Error!void {
-            std.debug.assert(self.is_valid());
             std.debug.assert(id >= 1);
+
+            self.base.lock();
+            defer self.base.unlock();
+
+            std.debug.assert(self.is_valid());
 
             const entry = self.base.get_by_id(id) orelse return error.NotFound;
 
@@ -307,8 +363,12 @@ pub fn TimedRegistry(comptime capacity: u32) type {
         }
 
         pub fn toggle(self: *Self, id: u32) Error!void {
-            std.debug.assert(self.is_valid());
             std.debug.assert(id >= 1);
+
+            self.base.lock();
+            defer self.base.unlock();
+
+            std.debug.assert(self.is_valid());
 
             const entry = self.base.get_by_id(id) orelse return error.NotFound;
 
@@ -318,7 +378,7 @@ pub fn TimedRegistry(comptime capacity: u32) type {
                 entry.set_enabled(false);
             } else {
                 if (entry.mode == .duration) {
-                    entry.start_time = @intCast(w32.GetTickCount64());
+                    entry.start_time = @intCast(win32.GetTickCount64());
                 }
 
                 entry.set_enabled(true);
@@ -327,27 +387,39 @@ pub fn TimedRegistry(comptime capacity: u32) type {
             }
         }
 
-        pub fn is_enabled(self: *const Self, id: u32) ?bool {
-            std.debug.assert(self.is_valid());
+        pub fn is_enabled(self: *Self, id: u32) ?bool {
             std.debug.assert(id >= 1);
+
+            self.base.lock();
+            defer self.base.unlock();
+
+            std.debug.assert(self.is_valid());
 
             const slot = self.base.find_by_id(id) orelse return null;
 
             return self.base.slot.entries[slot].is_enabled();
         }
 
-        pub fn is_expired(self: *const Self, id: u32) ?bool {
-            std.debug.assert(self.is_valid());
+        pub fn is_expired(self: *Self, id: u32) ?bool {
             std.debug.assert(id >= 1);
+
+            self.base.lock();
+            defer self.base.unlock();
+
+            std.debug.assert(self.is_valid());
 
             const slot = self.base.find_by_id(id) orelse return null;
 
             return self.base.slot.entries[slot].expired;
         }
 
-        pub fn get_remaining_count(self: *const Self, id: u32) ?u32 {
-            std.debug.assert(self.is_valid());
+        pub fn get_remaining_count(self: *Self, id: u32) ?u32 {
             std.debug.assert(id >= 1);
+
+            self.base.lock();
+            defer self.base.unlock();
+
+            std.debug.assert(self.is_valid());
 
             const slot = self.base.find_by_id(id) orelse return null;
 
@@ -365,9 +437,12 @@ pub fn TimedRegistry(comptime capacity: u32) type {
         }
 
         pub fn clear(self: *Self) void {
+            self.base.lock();
+            defer self.base.unlock();
+
             std.debug.assert(self.is_valid());
 
-            self.base.clear();
+            self.base.clear_locked();
         }
     };
 }

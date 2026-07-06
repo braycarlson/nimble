@@ -270,7 +270,7 @@ pub const Model = struct {
             std.debug.assert(i >= keycode.value_min);
 
             const key: u8 = @intCast(i);
-            const model_down = self.keys_down[key];
+            const model_down = self.is_down(key);
             const keyboard_down = keyboard.is_down(key);
 
             if (model_down != keyboard_down) {

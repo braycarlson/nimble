@@ -2,7 +2,7 @@ const std = @import("std");
 
 const key_event = @import("../event/key.zig");
 const modifier = @import("../modifier.zig");
-const response_mod = @import("../response.zig");
+const response = @import("../response.zig");
 const filter_mod = @import("../filter.zig");
 const pattern_mod = @import("pattern.zig");
 const config_mod = @import("../registry/config.zig");
@@ -11,12 +11,12 @@ const key_registry = @import("../registry/key.zig");
 const timer_mod = @import("../registry/timer.zig");
 const repeat_mod = @import("../registry/repeat.zig");
 const toggle_mod = @import("../registry/toggle.zig");
-const timed_mod = @import("../registry/timed.zig");
+const timed = @import("../registry/timed.zig");
 const chord_registry = @import("../registry/chord.zig");
 const sequence_registry = @import("../registry/sequence.zig");
 
 const Key = key_event.Key;
-const Response = response_mod.Response;
+const Response = response.Response;
 const WindowFilter = filter_mod.WindowFilter;
 
 const RepeatConfig = config_mod.RepeatConfig;
@@ -216,6 +216,7 @@ pub fn RepeatChainBuilder(comptime HookType: type) type {
                     .pause_exempt = self.is_pause_exempt,
                 },
             );
+            errdefer self.hook.registry.unregister(binding_id) catch {};
 
             std.debug.assert(binding_id >= 1);
 
@@ -282,6 +283,7 @@ pub fn TimerChainBuilder(comptime HookType: type) type {
                     .pause_exempt = self.is_pause_exempt,
                 },
             );
+            errdefer self.hook.registry.unregister(binding_id) catch {};
 
             std.debug.assert(binding_id >= 1);
 
@@ -342,6 +344,7 @@ pub fn ToggleChainBuilder(comptime HookType: type) type {
                     .pause_exempt = self.is_pause_exempt,
                 },
             );
+            errdefer self.hook.registry.unregister(action_binding_id) catch {};
 
             std.debug.assert(action_binding_id >= 1);
 
@@ -355,6 +358,7 @@ pub fn ToggleChainBuilder(comptime HookType: type) type {
                     .pause_exempt = self.is_pause_exempt,
                 },
             );
+            errdefer self.hook.registry.unregister(toggle_binding_id) catch {};
 
             std.debug.assert(toggle_binding_id >= 1);
 
@@ -401,44 +405,11 @@ pub fn MacroChainBuilder(comptime HookType: type) type {
             };
 
             const macro_id = try self.hook.macro_registry.create(self.config.name);
+            errdefer self.hook.macro_registry.delete(macro_id) catch {};
 
             std.debug.assert(macro_id >= 1);
 
-            if (self.hook.macro_registry.get(macro_id)) |m| {
-                std.debug.assert(self.config.step_count <= self.config.steps.len);
-
-                var i: u32 = 0;
-
-                while (i < self.config.step_count) : (i += 1) {
-                    const step = self.config.steps[i];
-
-                    switch (step.kind) {
-                        .text => {
-                            if (step.text) |txt| {
-                                try m.add_text(txt);
-                            }
-                        },
-                        .line => {
-                            if (step.text) |txt| {
-                                try m.add_line(txt);
-                            }
-                        },
-                        .key => {
-                            try m.add_action(Action{
-                                .kind = .key_press,
-                                .key = step.key_code,
-                                .modifiers = step.key_modifiers,
-                            });
-                        },
-                        .delay => {
-                            try m.add_action(Action{
-                                .kind = .delay,
-                                .delay_ms = step.delay_ms,
-                            });
-                        },
-                    }
-                }
-            }
+            try self.add_steps(macro_id);
 
             const binding_id = try self.hook.registry.register(
                 self.key,
@@ -454,6 +425,47 @@ pub fn MacroChainBuilder(comptime HookType: type) type {
             std.debug.assert(binding_id >= 1);
 
             return macro_id;
+        }
+
+        fn add_steps(self: *const Self, macro_id: u32) !void {
+            std.debug.assert(macro_id >= 1);
+            std.debug.assert(self.config.step_count <= self.config.steps.len);
+
+            const m = self.hook.macro_registry.get(macro_id) orelse return;
+
+            var i: u32 = 0;
+
+            while (i < self.config.step_count) : (i += 1) {
+                const step = self.config.steps[i];
+
+                switch (step.kind) {
+                    .text => {
+                        if (step.text) |txt| {
+                            try m.add_text(txt);
+                        }
+                    },
+                    .line => {
+                        if (step.text) |txt| {
+                            try m.add_line(txt);
+                        }
+                    },
+                    .key => {
+                        try m.add_action(Action{
+                            .kind = .key_press,
+                            .key = step.key_code,
+                            .modifiers = step.key_modifiers,
+                        });
+                    },
+                    .delay => {
+                        try m.add_action(Action{
+                            .kind = .delay,
+                            .delay_ms = step.delay_ms,
+                        });
+                    },
+                }
+            }
+
+            std.debug.assert(i == self.config.step_count);
         }
     };
 }
@@ -603,6 +615,7 @@ pub fn OneShotBuilder(comptime HookType: type, comptime RegistryType: type) type
                     .pause_exempt = false,
                 },
             );
+            errdefer self.hook.registry.unregister(binding_id) catch {};
 
             std.debug.assert(binding_id >= 1);
 
@@ -688,17 +701,18 @@ pub fn TimedBuilder(comptime HookType: type, comptime RegistryType: type) type {
                     .pause_exempt = false,
                 },
             );
+            errdefer self.hook.registry.unregister(binding_id) catch {};
 
             std.debug.assert(binding_id >= 1);
 
-            var options = timed_mod.Options{};
+            var options = timed.Options{};
 
             if (self.count_limit > 0) {
-                options = timed_mod.Options.count(self.count_limit);
+                options = timed.Options.count(self.count_limit);
             } else if (self.duration_ms > 0) {
-                options = timed_mod.Options.duration(self.duration_ms);
+                options = timed.Options.duration(self.duration_ms);
             } else {
-                options = timed_mod.Options.toggle_mode();
+                options = timed.Options.toggle_mode();
             }
 
             const id = try self.registry.register(binding_id, wrapper.invoke, context, options);
@@ -781,6 +795,7 @@ pub fn RepeatBuilder(comptime HookType: type, comptime RegistryType: type) type 
                     .pause_exempt = false,
                 },
             );
+            errdefer self.hook.registry.unregister(binding_id) catch {};
 
             std.debug.assert(binding_id >= 1);
 
@@ -937,6 +952,7 @@ pub fn MacroBuilder(comptime HookType: type) type {
 
         hook: *HookType,
         name: []const u8,
+        play_callback: key_registry.Callback,
         steps: [steps_max]Step = [_]Step{.{}} ** steps_max,
         step_count: u32 = 0,
         binding_key: ?u8 = null,
@@ -944,24 +960,43 @@ pub fn MacroBuilder(comptime HookType: type) type {
         filter: WindowFilter = .{},
         is_pause_exempt: bool = false,
 
-        pub fn init(h: *HookType, name: []const u8) Self {
-            return Self{
+        pub fn init(h: *HookType, comptime name: []const u8) Self {
+            comptime std.debug.assert(name.len > 0);
+
+            const player = struct {
+                fn invoke(ctx: *anyopaque, k: *const Key) Response {
+                    std.debug.assert(k.is_valid());
+
+                    const typed: *HookType = @ptrCast(@alignCast(ctx));
+
+                    _ = typed.macro_registry.play_by_name(name);
+
+                    return .consume;
+                }
+            };
+
+            const result = Self{
                 .hook = h,
                 .name = name,
+                .play_callback = player.invoke,
             };
+
+            std.debug.assert(result.step_count == 0);
+
+            return result;
         }
 
         pub fn text(self: Self, txt: []const u8) Self {
             std.debug.assert(txt.len > 0);
+            std.debug.assert(self.step_count < steps_max);
 
             var result = self;
-            if (result.step_count < steps_max) {
-                result.steps[result.step_count] = .{
-                    .kind = .text,
-                    .text = txt,
-                };
-                result.step_count += 1;
-            }
+
+            result.steps[result.step_count] = .{
+                .kind = .text,
+                .text = txt,
+            };
+            result.step_count += 1;
 
             std.debug.assert(result.step_count <= steps_max);
 
@@ -969,14 +1004,15 @@ pub fn MacroBuilder(comptime HookType: type) type {
         }
 
         pub fn line(self: Self, txt: []const u8) Self {
+            std.debug.assert(self.step_count < steps_max);
+
             var result = self;
-            if (result.step_count < steps_max) {
-                result.steps[result.step_count] = .{
-                    .kind = .line,
-                    .text = txt,
-                };
-                result.step_count += 1;
-            }
+
+            result.steps[result.step_count] = .{
+                .kind = .line,
+                .text = txt,
+            };
+            result.step_count += 1;
 
             std.debug.assert(result.step_count <= steps_max);
 
@@ -987,16 +1023,16 @@ pub fn MacroBuilder(comptime HookType: type) type {
             const parsed = comptime pattern_mod.parse(pattern);
 
             comptime std.debug.assert(parsed.key != 0);
+            std.debug.assert(self.step_count < steps_max);
 
             var result = self;
-            if (result.step_count < steps_max) {
-                result.steps[result.step_count] = .{
-                    .kind = .key,
-                    .keycode = parsed.key,
-                    .key_modifiers = parsed.modifiers,
-                };
-                result.step_count += 1;
-            }
+
+            result.steps[result.step_count] = .{
+                .kind = .key,
+                .keycode = parsed.key,
+                .key_modifiers = parsed.modifiers,
+            };
+            result.step_count += 1;
 
             std.debug.assert(result.step_count <= steps_max);
 
@@ -1004,14 +1040,15 @@ pub fn MacroBuilder(comptime HookType: type) type {
         }
 
         pub fn delay(self: Self, ms: u32) Self {
+            std.debug.assert(self.step_count < steps_max);
+
             var result = self;
-            if (result.step_count < steps_max) {
-                result.steps[result.step_count] = .{
-                    .kind = .delay,
-                    .delay_ms = ms,
-                };
-                result.step_count += 1;
-            }
+
+            result.steps[result.step_count] = .{
+                .kind = .delay,
+                .delay_ms = ms,
+            };
+            result.step_count += 1;
 
             std.debug.assert(result.step_count <= steps_max);
 
@@ -1043,54 +1080,17 @@ pub fn MacroBuilder(comptime HookType: type) type {
 
         pub fn create(self: Self) !u32 {
             const macro_id = try self.hook.macro_registry.create(self.name);
+            errdefer self.hook.macro_registry.delete(macro_id) catch {};
 
             std.debug.assert(macro_id >= 1);
 
-            if (self.hook.macro_registry.get(macro_id)) |m| {
-                std.debug.assert(self.step_count <= self.steps.len);
-
-                var i: u32 = 0;
-                while (i < self.step_count) : (i += 1) {
-                    const step = self.steps[i];
-                    switch (step.kind) {
-                        .text => {
-                            if (step.text) |txt| {
-                                try m.add_text(txt);
-                            }
-                        },
-                        .line => {
-                            if (step.text) |txt| {
-                                try m.add_line(txt);
-                            }
-                        },
-                        .key => {
-                            try m.add_action(Action{
-                                .kind = .key_press,
-                                .key = step.keycode,
-                                .modifiers = step.key_modifiers,
-                            });
-                        },
-                        .delay => {
-                            try m.add_action(Action{
-                                .kind = .delay,
-                                .delay_ms = step.delay_ms,
-                            });
-                        },
-                    }
-                }
-            }
+            try self.add_steps(macro_id);
 
             if (self.binding_key) |bkey| {
-                const Dummy = struct {
-                    fn pass_through(_: *anyopaque, _: *const Key) Response {
-                        return .pass;
-                    }
-                };
-
                 const binding_id = try self.hook.registry.register(
                     bkey,
                     self.binding_modifiers,
-                    Dummy.pass_through,
+                    self.play_callback,
                     self.hook,
                     key_registry.Options{
                         .filter = self.filter,
@@ -1102,6 +1102,47 @@ pub fn MacroBuilder(comptime HookType: type) type {
             }
 
             return macro_id;
+        }
+
+        fn add_steps(self: *const Self, macro_id: u32) !void {
+            std.debug.assert(macro_id >= 1);
+            std.debug.assert(self.step_count <= self.steps.len);
+
+            const m = self.hook.macro_registry.get(macro_id) orelse return;
+
+            var i: u32 = 0;
+
+            while (i < self.step_count) : (i += 1) {
+                const step = self.steps[i];
+
+                switch (step.kind) {
+                    .text => {
+                        if (step.text) |txt| {
+                            try m.add_text(txt);
+                        }
+                    },
+                    .line => {
+                        if (step.text) |txt| {
+                            try m.add_line(txt);
+                        }
+                    },
+                    .key => {
+                        try m.add_action(Action{
+                            .kind = .key_press,
+                            .key = step.keycode,
+                            .modifiers = step.key_modifiers,
+                        });
+                    },
+                    .delay => {
+                        try m.add_action(Action{
+                            .kind = .delay,
+                            .delay_ms = step.delay_ms,
+                        });
+                    },
+                }
+            }
+
+            std.debug.assert(i == self.step_count);
         }
 
         pub fn on(
@@ -1119,42 +1160,11 @@ pub fn MacroBuilder(comptime HookType: type) type {
             };
 
             const macro_id = try self.hook.macro_registry.create(self.name);
+            errdefer self.hook.macro_registry.delete(macro_id) catch {};
 
             std.debug.assert(macro_id >= 1);
 
-            if (self.hook.macro_registry.get(macro_id)) |m| {
-                std.debug.assert(self.step_count <= self.steps.len);
-
-                var i: u32 = 0;
-                while (i < self.step_count) : (i += 1) {
-                    const step = self.steps[i];
-                    switch (step.kind) {
-                        .text => {
-                            if (step.text) |txt| {
-                                try m.add_text(txt);
-                            }
-                        },
-                        .line => {
-                            if (step.text) |txt| {
-                                try m.add_line(txt);
-                            }
-                        },
-                        .key => {
-                            try m.add_action(Action{
-                                .kind = .key_press,
-                                .key = step.keycode,
-                                .modifiers = step.key_modifiers,
-                            });
-                        },
-                        .delay => {
-                            try m.add_action(Action{
-                                .kind = .delay,
-                                .delay_ms = step.delay_ms,
-                            });
-                        },
-                    }
-                }
-            }
+            try self.add_steps(macro_id);
 
             if (self.binding_key) |bkey| {
                 const binding_id = try self.hook.registry.register(
@@ -1341,8 +1351,11 @@ pub fn KeyRepeatChainBuilder(comptime HookType: type) type {
                     .pause_exempt = self.is_pause_exempt,
                 },
             );
+            errdefer self.hook.registry.unregister(binding_id) catch {};
 
-            return self.hook.repeat_registry.register(
+            std.debug.assert(binding_id >= 1);
+
+            const repeat_id = try self.hook.repeat_registry.register(
                 binding_id,
                 wrapper.invoke,
                 context,
@@ -1351,6 +1364,10 @@ pub fn KeyRepeatChainBuilder(comptime HookType: type) type {
                     .initial_delay_ms = self.initial_delay_ms,
                 },
             );
+
+            std.debug.assert(repeat_id >= 1);
+
+            return repeat_id;
         }
     };
 }
@@ -1401,8 +1418,11 @@ pub fn KeyTimerChainBuilder(comptime HookType: type) type {
                     .pause_exempt = self.is_pause_exempt,
                 },
             );
+            errdefer self.hook.registry.unregister(binding_id) catch {};
 
-            return self.hook.timer_registry.register(
+            std.debug.assert(binding_id >= 1);
+
+            const timer_id = try self.hook.timer_registry.register(
                 self.interval_ms,
                 wrapper.invoke,
                 context,
@@ -1411,6 +1431,10 @@ pub fn KeyTimerChainBuilder(comptime HookType: type) type {
                     .repeat = self.repeating,
                 },
             );
+
+            std.debug.assert(timer_id >= 1);
+
+            return timer_id;
         }
     };
 }

@@ -1,13 +1,13 @@
 const std = @import("std");
 
 const mouse_event = @import("../event/mouse.zig");
-const response_mod = @import("../response.zig");
+const response = @import("../response.zig");
 const filter_mod = @import("../filter.zig");
 const mouse_registry = @import("../registry/mouse.zig");
 
 const Mouse = mouse_event.Mouse;
 const MouseKind = mouse_event.Kind;
-const Response = response_mod.Response;
+const Response = response.Response;
 const WindowFilter = filter_mod.WindowFilter;
 
 pub fn BindBuilder(comptime HookType: type) type {

@@ -2,11 +2,13 @@ const std = @import("std");
 
 const key_event = @import("../event/key.zig");
 const modifier = @import("../modifier.zig");
-const response_mod = @import("../response.zig");
+const response = @import("../response.zig");
 const base = @import("base.zig");
 
+const Mutex = @import("../mutex.zig").Mutex;
+
 const Key = key_event.Key;
-const Response = response_mod.Response;
+const Response = response.Response;
 const Next = base.Next;
 
 pub const BlockedBinding = struct {
@@ -21,6 +23,7 @@ pub fn BlockListMiddleware(comptime capacity: u32) type {
         blocked: [capacity]?BlockedBinding = [_]?BlockedBinding{null} ** capacity,
         count: u32 = 0,
         enabled: bool = true,
+        mutex: Mutex = .{},
 
         pub fn init() Self {
             const result = Self{};
@@ -32,8 +35,12 @@ pub fn BlockListMiddleware(comptime capacity: u32) type {
         }
 
         pub fn add(self: *Self, binding: BlockedBinding) !u32 {
-            std.debug.assert(self.count <= capacity);
             std.debug.assert(binding.modifiers.flags <= modifier.flag_all);
+
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            std.debug.assert(self.count <= capacity);
 
             if (self.count >= capacity) {
                 return error.BlockListFull;
@@ -53,6 +60,9 @@ pub fn BlockListMiddleware(comptime capacity: u32) type {
         }
 
         pub fn remove(self: *Self, slot: u32) !void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
             std.debug.assert(self.count <= capacity);
 
             if (slot >= capacity) {
@@ -72,30 +82,48 @@ pub fn BlockListMiddleware(comptime capacity: u32) type {
         }
 
         pub fn process(self: *Self, key: *const Key, next: *const Next) Response {
-            std.debug.assert(self.count <= capacity);
             std.debug.assert(key.is_valid());
 
+            if (self.is_blocked(key)) {
+                return .consume;
+            }
+
+            const result = next.invoke(key);
+
+            std.debug.assert(result.is_valid());
+
+            return result;
+        }
+
+        fn is_blocked(self: *Self, key: *const Key) bool {
+            std.debug.assert(key.is_valid());
+
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            std.debug.assert(self.count <= capacity);
+
             if (!self.enabled) {
-                return next.invoke(key);
+                return false;
             }
 
             if (!key.down) {
-                return next.invoke(key);
+                return false;
             }
 
             var i: u32 = 0;
 
             while (i < capacity) : (i += 1) {
                 if (self.blocked[i]) |binding| {
-                    if (key.value == binding.key) {
-                        return .consume;
+                    if (key.value == binding.key and key.modifiers.eql(&binding.modifiers)) {
+                        return true;
                     }
                 }
             }
 
             std.debug.assert(i == capacity);
 
-            return next.invoke(key);
+            return false;
         }
 
         fn find_empty_slot(self: *const Self) ?u32 {
@@ -115,18 +143,29 @@ pub fn BlockListMiddleware(comptime capacity: u32) type {
         }
 
         pub fn set_enabled(self: *Self, value: bool) void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
             std.debug.assert(self.count <= capacity);
 
             self.enabled = value;
+
+            std.debug.assert(self.enabled == value);
         }
 
-        pub fn is_enabled(self: *const Self) bool {
+        pub fn is_enabled(self: *Self) bool {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
             std.debug.assert(self.count <= capacity);
 
             return self.enabled;
         }
 
         pub fn clear(self: *Self) void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
             std.debug.assert(self.count <= capacity);
 
             var i: u32 = 0;

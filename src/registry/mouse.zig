@@ -1,12 +1,12 @@
 const std = @import("std");
 
-const response_mod = @import("../response.zig");
+const response = @import("../response.zig");
 const filter_mod = @import("../filter.zig");
 const event = @import("../event/mouse.zig");
-const base_mod = @import("base.zig");
-const entry_mod = @import("entry.zig");
+const base = @import("base.zig");
+const entry = @import("entry.zig");
 
-const Response = response_mod.Response;
+const Response = response.Response;
 const Mouse = event.Mouse;
 const MouseKind = event.Kind;
 const WindowFilter = filter_mod.WindowFilter;
@@ -14,14 +14,14 @@ const WindowFilter = filter_mod.WindowFilter;
 pub const capacity_default: u32 = 128;
 pub const capacity_max: u32 = 1024;
 
-pub const Error = base_mod.BaseError || error{
+pub const Error = base.BaseError || error{
     AlreadyRegistered,
 };
 
 pub const Callback = *const fn (context: *anyopaque, mouse: *const Mouse) Response;
 
 pub const Entry = struct {
-    base: entry_mod.FilteredEntry(Callback, WindowFilter) = .{},
+    base: entry.FilteredEntry(Callback, WindowFilter) = .{},
     kind: MouseKind = .other,
 
     pub fn get_id(self: *const Entry) u32 {
@@ -80,7 +80,7 @@ pub fn MouseRegistry(comptime capacity: u32) type {
     return struct {
         const Self = @This();
 
-        const Base = base_mod.BaseRegistry(Entry, capacity, .{
+        const Base = base.BaseRegistry(Entry, capacity, .{
             .has_mutex = true,
             .has_paused = true,
         });
