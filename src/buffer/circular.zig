@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const assert = std.debug.assert;
+
 pub const capacity_min: u32 = 1;
 pub const capacity_max: u32 = 1024;
 
@@ -8,92 +10,92 @@ pub const Error = error{
     PatternTooLarge,
 };
 
-pub fn CircularBuffer(comptime capacity: u32) type {
+pub fn CircularBufferType(comptime capacity: u32) type {
     if (capacity < capacity_min) {
-        @compileError("CircularBuffer capacity must be at least 1");
+        @compileError("CircularBufferType capacity must be at least 1");
     }
 
     if (capacity > capacity_max) {
-        @compileError("CircularBuffer capacity must be 1024 or less");
+        @compileError("CircularBufferType capacity must be 1024 or less");
     }
 
     return struct {
-        const Self = @This();
+        const Instance = @This();
 
         buffer: [capacity]u8 = [_]u8{0} ** capacity,
         head: u32 = 0,
         tail: u32 = 0,
         count: u32 = 0,
 
-        pub fn init() Self {
-            const result = Self{};
+        pub fn init() Instance {
+            const result = Instance{};
 
-            std.debug.assert(result.head == 0);
-            std.debug.assert(result.tail == 0);
-            std.debug.assert(result.count == 0);
-            std.debug.assert(result.is_empty());
+            assert(result.head == 0);
+            assert(result.tail == 0);
+            assert(result.count == 0);
+            assert(result.is_empty());
 
             return result;
         }
 
-        pub fn is_valid(self: *const Self) bool {
-            std.debug.assert(capacity >= capacity_min);
-            std.debug.assert(capacity <= capacity_max);
+        pub fn is_valid(instance: *const Instance) bool {
+            assert(capacity >= capacity_min);
+            assert(capacity <= capacity_max);
 
-            const head_valid = self.head < capacity;
-            const tail_valid = self.tail < capacity;
-            const count_valid = self.count <= capacity;
+            const head_valid = instance.head < capacity;
+            const tail_valid = instance.tail < capacity;
+            const count_valid = instance.count <= capacity;
 
             return head_valid and tail_valid and count_valid;
         }
 
-        pub fn clear(self: *Self) void {
-            std.debug.assert(self.is_valid());
+        pub fn clear(instance: *Instance) void {
+            assert(instance.is_valid());
 
-            self.head = 0;
-            self.tail = 0;
-            self.count = 0;
+            instance.head = 0;
+            instance.tail = 0;
+            instance.count = 0;
 
-            std.debug.assert(self.head == 0);
-            std.debug.assert(self.tail == 0);
-            std.debug.assert(self.count == 0);
-            std.debug.assert(self.is_empty());
+            assert(instance.head == 0);
+            assert(instance.tail == 0);
+            assert(instance.count == 0);
+            assert(instance.is_empty());
         }
 
-        pub fn get(self: *const Self, index: u32) ?u8 {
-            std.debug.assert(self.is_valid());
+        pub fn get(instance: *const Instance, index: u32) ?u8 {
+            assert(instance.is_valid());
 
-            const length_current = self.length();
+            const length_current = instance.length();
 
             if (index >= length_current) {
                 return null;
             }
 
-            std.debug.assert(index < length_current);
-            std.debug.assert(index < capacity);
+            assert(index < length_current);
+            assert(index < capacity);
 
-            const position = wrap(self.head + index);
+            const position = wrap(instance.head + index);
 
-            std.debug.assert(position < capacity);
+            assert(position < capacity);
 
-            return self.buffer[position];
+            return instance.buffer[position];
         }
 
-        pub fn is_empty(self: *const Self) bool {
-            std.debug.assert(self.is_valid());
+        pub fn is_empty(instance: *const Instance) bool {
+            assert(instance.is_valid());
 
-            return self.count == 0;
+            return instance.count == 0;
         }
 
-        pub fn length(self: *const Self) u32 {
-            std.debug.assert(self.is_valid());
-            std.debug.assert(self.count <= capacity);
+        pub fn length(instance: *const Instance) u32 {
+            assert(instance.is_valid());
+            assert(instance.count <= capacity);
 
-            return self.count;
+            return instance.count;
         }
 
-        pub fn match(self: *const Self, pattern: []const u8) Error!bool {
-            std.debug.assert(self.is_valid());
+        pub fn match(instance: *const Instance, pattern: []const u8) Error!bool {
+            assert(instance.is_valid());
 
             const size: u32 = @intCast(pattern.len);
 
@@ -105,62 +107,62 @@ pub fn CircularBuffer(comptime capacity: u32) type {
                 return Error.PatternTooLarge;
             }
 
-            std.debug.assert(size > 0);
-            std.debug.assert(size <= capacity);
+            assert(size > 0);
+            assert(size <= capacity);
 
-            const length_current = self.length();
+            const length_current = instance.length();
 
             if (length_current < size) {
                 return false;
             }
 
-            std.debug.assert(length_current >= size);
+            assert(length_current >= size);
 
-            return self.compare(pattern, size);
+            return instance.compare(pattern, size);
         }
 
-        pub fn push(self: *Self, value: u8) void {
-            std.debug.assert(self.is_valid());
+        pub fn push(instance: *Instance, value: u8) void {
+            assert(instance.is_valid());
 
-            self.buffer[self.tail] = value;
-            self.tail = wrap(self.tail + 1);
+            instance.buffer[instance.tail] = value;
+            instance.tail = wrap(instance.tail + 1);
 
-            if (self.count == capacity) {
-                self.head = wrap(self.head + 1);
+            if (instance.count == capacity) {
+                instance.head = wrap(instance.head + 1);
             } else {
-                self.count += 1;
+                instance.count += 1;
             }
 
-            std.debug.assert(self.is_valid());
-            std.debug.assert(self.count <= capacity);
-            std.debug.assert(self.buffer[wrap(self.tail + capacity - 1)] == value);
+            assert(instance.is_valid());
+            assert(instance.count <= capacity);
+            assert(instance.buffer[wrap(instance.tail + capacity - 1)] == value);
         }
 
-        pub fn pop(self: *Self) ?u8 {
-            std.debug.assert(self.is_valid());
+        pub fn pop(instance: *Instance) ?u8 {
+            assert(instance.is_valid());
 
-            if (self.is_empty()) {
+            if (instance.is_empty()) {
                 return null;
             }
 
-            self.tail = decrement(self.tail);
-            self.count -= 1;
+            instance.tail = decrement(instance.tail);
+            instance.count -= 1;
 
-            const result = self.buffer[self.tail];
+            const result = instance.buffer[instance.tail];
 
-            std.debug.assert(self.is_valid());
+            assert(instance.is_valid());
 
             return result;
         }
 
-        fn compare(self: *const Self, pattern: []const u8, size: u32) bool {
-            std.debug.assert(self.is_valid());
-            std.debug.assert(size > 0);
-            std.debug.assert(size <= capacity);
-            std.debug.assert(self.length() >= size);
+        fn compare(instance: *const Instance, pattern: []const u8, size: u32) bool {
+            assert(instance.is_valid());
+            assert(size > 0);
+            assert(size <= capacity);
+            assert(instance.length() >= size);
 
             var index: u32 = size;
-            var cursor: u32 = self.tail;
+            var cursor: u32 = instance.tail;
             var iteration: u32 = 0;
 
             while (iteration < capacity) : (iteration += 1) {
@@ -168,32 +170,32 @@ pub fn CircularBuffer(comptime capacity: u32) type {
                     break;
                 }
 
-                std.debug.assert(index > 0);
-                std.debug.assert(index <= size);
+                assert(index > 0);
+                assert(index <= size);
 
                 cursor = decrement(cursor);
 
-                std.debug.assert(cursor < capacity);
+                assert(cursor < capacity);
 
                 const index_pattern = index - 1;
 
-                std.debug.assert(index_pattern < size);
+                assert(index_pattern < size);
 
-                if (self.buffer[cursor] != pattern[index_pattern]) {
+                if (instance.buffer[cursor] != pattern[index_pattern]) {
                     return false;
                 }
 
                 index -= 1;
             }
 
-            std.debug.assert(index == 0);
-            std.debug.assert(iteration <= capacity);
+            assert(index == 0);
+            assert(iteration <= capacity);
 
             return true;
         }
 
         fn decrement(value: u32) u32 {
-            std.debug.assert(value < capacity);
+            assert(value < capacity);
 
             if (value == 0) {
                 return capacity - 1;
@@ -203,13 +205,280 @@ pub fn CircularBuffer(comptime capacity: u32) type {
         }
 
         fn wrap(value: u32) u32 {
-            std.debug.assert(capacity > 0);
+            assert(capacity > 0);
 
             const result = value % capacity;
 
-            std.debug.assert(result < capacity);
+            assert(result < capacity);
 
             return result;
         }
     };
+}
+
+test "a new buffer starts empty" {
+    const buffer = CircularBufferType(16).init();
+
+    try std.testing.expect(buffer.is_empty());
+    try std.testing.expectEqual(@as(u32, 0), buffer.length());
+    try std.testing.expectEqual(@as(u32, 0), buffer.head);
+    try std.testing.expectEqual(@as(u32, 0), buffer.tail);
+}
+
+test "a new buffer is valid" {
+    const buffer = CircularBufferType(16).init();
+
+    try std.testing.expect(buffer.is_valid());
+}
+
+test "a pushed value lands in the buffer" {
+    var buffer = CircularBufferType(16).init();
+
+    buffer.push('A');
+
+    try std.testing.expect(!buffer.is_empty());
+    try std.testing.expectEqual(@as(u32, 1), buffer.length());
+    try std.testing.expect(buffer.is_valid());
+}
+
+test "pushed values keep their order" {
+    var buffer = CircularBufferType(16).init();
+
+    buffer.push('A');
+    buffer.push('B');
+    buffer.push('C');
+
+    try std.testing.expectEqual(@as(u32, 3), buffer.length());
+    try std.testing.expect(buffer.is_valid());
+}
+
+test "clearing empties the buffer" {
+    var buffer = CircularBufferType(16).init();
+
+    buffer.push('A');
+    buffer.push('B');
+    buffer.push('C');
+
+    buffer.clear();
+
+    try std.testing.expect(buffer.is_empty());
+    try std.testing.expectEqual(@as(u32, 0), buffer.length());
+    try std.testing.expect(buffer.is_valid());
+}
+
+test "pushing past capacity wraps around" {
+    var buffer = CircularBufferType(4).init();
+
+    buffer.push('A');
+    buffer.push('B');
+    buffer.push('C');
+    buffer.push('D');
+    buffer.push('E');
+
+    try std.testing.expectEqual(@as(u32, 4), buffer.length());
+    try std.testing.expect(buffer.is_valid());
+}
+
+test "get returns the value at an index" {
+    var buffer = CircularBufferType(16).init();
+
+    buffer.push('A');
+    buffer.push('B');
+    buffer.push('C');
+
+    try std.testing.expectEqual(@as(?u8, 'A'), buffer.get(0));
+    try std.testing.expectEqual(@as(?u8, 'B'), buffer.get(1));
+    try std.testing.expectEqual(@as(?u8, 'C'), buffer.get(2));
+}
+
+test "get returns null past the end" {
+    var buffer = CircularBufferType(16).init();
+
+    buffer.push('A');
+    buffer.push('B');
+
+    try std.testing.expect(buffer.get(2) == null);
+    try std.testing.expect(buffer.get(100) == null);
+}
+
+test "a single character pattern matches" {
+    var buffer = CircularBufferType(16).init();
+
+    buffer.push('A');
+    buffer.push('B');
+    buffer.push('C');
+
+    try std.testing.expect(try buffer.match("C"));
+    try std.testing.expect(!try buffer.match("A"));
+    try std.testing.expect(!try buffer.match("D"));
+}
+
+test "a multi character pattern matches" {
+    var buffer = CircularBufferType(16).init();
+
+    buffer.push('H');
+    buffer.push('E');
+    buffer.push('L');
+    buffer.push('L');
+    buffer.push('O');
+
+    try std.testing.expect(try buffer.match("LO"));
+    try std.testing.expect(try buffer.match("LLO"));
+    try std.testing.expect(try buffer.match("ELLO"));
+    try std.testing.expect(try buffer.match("HELLO"));
+    try std.testing.expect(!try buffer.match("WORLD"));
+}
+
+test "an empty pattern is an error" {
+    var buffer = CircularBufferType(16).init();
+
+    buffer.push('A');
+    buffer.push('B');
+
+    const result = buffer.match("");
+
+    try std.testing.expectError(Error.EmptyPattern, result);
+}
+
+test "a pattern larger than the capacity is an error" {
+    var buffer = CircularBufferType(4).init();
+
+    buffer.push('A');
+    buffer.push('B');
+
+    const result = buffer.match("ABCDE");
+
+    try std.testing.expectError(Error.PatternTooLarge, result);
+}
+
+test "an empty buffer matches nothing" {
+    const buffer = CircularBufferType(16).init();
+
+    try std.testing.expect(!try buffer.match("A"));
+}
+
+test "a pattern still matches after a wrap around" {
+    var buffer = CircularBufferType(4).init();
+
+    buffer.push('A');
+    buffer.push('B');
+    buffer.push('C');
+    buffer.push('D');
+    buffer.push('E');
+    buffer.push('F');
+
+    try std.testing.expect(try buffer.match("F"));
+    try std.testing.expect(try buffer.match("EF"));
+    try std.testing.expect(try buffer.match("DEF"));
+}
+
+test "the length is capped at the capacity" {
+    var buffer = CircularBufferType(4).init();
+
+    for (0..10) |_| {
+        buffer.push('X');
+    }
+
+    try std.testing.expectEqual(@as(u32, 4), buffer.length());
+    try std.testing.expect(buffer.is_valid());
+}
+
+test "buffers of different capacities behave alike" {
+    var buf1 = CircularBufferType(1).init();
+    var buf8 = CircularBufferType(8).init();
+    var buf64 = CircularBufferType(64).init();
+    var buf1024 = CircularBufferType(1024).init();
+
+    buf1.push('A');
+    buf8.push('A');
+    buf64.push('A');
+    buf1024.push('A');
+
+    try std.testing.expect(buf1.is_valid());
+    try std.testing.expect(buf8.is_valid());
+    try std.testing.expect(buf64.is_valid());
+    try std.testing.expect(buf1024.is_valid());
+}
+
+test "a cleared buffer is empty" {
+    var buffer = CircularBufferType(16).init();
+
+    buffer.push('A');
+    buffer.push('B');
+
+    try std.testing.expect(!buffer.is_empty());
+
+    buffer.clear();
+
+    try std.testing.expect(buffer.is_empty());
+}
+
+test "pattern matching is case sensitive" {
+    var buffer = CircularBufferType(16).init();
+
+    buffer.push('H');
+    buffer.push('i');
+
+    try std.testing.expect(try buffer.match("Hi"));
+    try std.testing.expect(!try buffer.match("HI"));
+    try std.testing.expect(!try buffer.match("hi"));
+}
+
+test "a pattern builds up one push at a time" {
+    var buffer = CircularBufferType(32).init();
+
+    const text = "hello world";
+
+    for (text) |c| {
+        buffer.push(c);
+    }
+
+    try std.testing.expect(try buffer.match("world"));
+    try std.testing.expect(try buffer.match("o world"));
+    try std.testing.expect(try buffer.match("hello world"));
+}
+
+test "constants: valid ranges" {
+    try std.testing.expectEqual(@as(u32, 1), capacity_min);
+    try std.testing.expectEqual(@as(u32, 1024), capacity_max);
+}
+
+test "pushing at capacity drops the oldest value" {
+    var buffer = CircularBufferType(4).init();
+
+    buffer.push('A');
+    buffer.push('B');
+    buffer.push('C');
+    buffer.push('D');
+    buffer.push('E');
+
+    try std.testing.expectEqual(@as(u32, 4), buffer.length());
+    try std.testing.expectEqual(@as(?u8, 'B'), buffer.get(0));
+    try std.testing.expectEqual(@as(?u8, 'E'), buffer.get(3));
+    try std.testing.expect(buffer.get(4) == null);
+}
+
+test "pop removes the newest value" {
+    var buffer = CircularBufferType(16).init();
+
+    buffer.push('A');
+    buffer.push('B');
+    buffer.push('C');
+
+    try std.testing.expectEqual(@as(?u8, 'C'), buffer.pop());
+    try std.testing.expectEqual(@as(u32, 2), buffer.length());
+    try std.testing.expectEqual(@as(?u8, 'A'), buffer.get(0));
+    try std.testing.expectEqual(@as(?u8, 'B'), buffer.get(1));
+}
+
+test "pop returns null once the buffer is empty" {
+    var buffer = CircularBufferType(16).init();
+
+    buffer.push('A');
+    buffer.push('B');
+
+    try std.testing.expectEqual(@as(?u8, 'B'), buffer.pop());
+    try std.testing.expectEqual(@as(?u8, 'A'), buffer.pop());
+    try std.testing.expect(buffer.is_empty());
+    try std.testing.expect(buffer.pop() == null);
 }

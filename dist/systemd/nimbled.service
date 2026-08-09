@@ -1,0 +1,17 @@
+[Unit]
+Description=nimble input daemon (sole evdev grabber, serves locker/mute/deafen/phantom)
+Documentation=https://github.com/braycarlson/nimble
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/nimbled
+Restart=always
+RestartSec=1
+# The daemon opens /dev/uinput and /dev/input/event*; the user must be in the
+# input group and a udev rule must grant the group access to /dev/uinput.
+Nice=-5
+
+[Install]
+WantedBy=graphical-session.target

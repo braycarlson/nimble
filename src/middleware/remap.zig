@@ -1,101 +1,94 @@
 const std = @import("std");
 
+const base = @import("base.zig");
 const key_event = @import("../event/key.zig");
 const keycode = @import("../keycode.zig");
 const modifier = @import("../modifier.zig");
 const response = @import("../response.zig");
-const base = @import("base.zig");
 
-const Mutex = @import("../mutex.zig").Mutex;
-
+const Mutex = @import("../sync.zig").Mutex;
+const assert = std.debug.assert;
+const Keycode = keycode.Keycode;
 const Key = key_event.Key;
 const Response = response.Response;
 const Next = base.Next;
 
 pub const Mapping = struct {
-    from_key: u8,
+    from_key: Keycode,
     from_modifiers: modifier.Set,
-    to_key: u8,
+    to_key: Keycode,
     to_modifiers: modifier.Set,
 };
 
-pub fn RemapMiddleware(comptime capacity: u32) type {
+pub fn RemapMiddlewareType(comptime capacity: u32) type {
     return struct {
-        const Self = @This();
+        const Instance = @This();
 
         mappings: [capacity]?Mapping = [_]?Mapping{null} ** capacity,
         count: u32 = 0,
         mutex: Mutex = .{},
 
-        pub fn init() Self {
-            const result = Self{};
+        pub fn init() Instance {
+            const result = Instance{};
 
-            std.debug.assert(result.count == 0);
-            std.debug.assert(capacity > 0);
+            assert(result.count == 0);
+            assert(capacity > 0);
 
             return result;
         }
 
-        pub fn add(self: *Self, mapping: Mapping) !u32 {
-            std.debug.assert(mapping.from_modifiers.flags <= modifier.flag_all);
-            std.debug.assert(mapping.to_modifiers.flags <= modifier.flag_all);
+        pub fn add(instance: *Instance, mapping: Mapping) !u32 {
+            assert(mapping.from_modifiers.flags <= modifier.flag_all);
+            assert(mapping.to_modifiers.flags <= modifier.flag_all);
 
-            if (!keycode.is_valid(mapping.from_key)) {
-                return error.InvalidKey;
-            }
+            instance.mutex.lock();
+            defer instance.mutex.unlock();
 
-            if (!keycode.is_valid(mapping.to_key)) {
-                return error.InvalidKey;
-            }
+            assert(instance.count <= capacity);
 
-            self.mutex.lock();
-            defer self.mutex.unlock();
-
-            std.debug.assert(self.count <= capacity);
-
-            if (self.count >= capacity) {
+            if (instance.count >= capacity) {
                 return error.RemapFull;
             }
 
-            const slot = self.find_empty_slot() orelse return error.RemapFull;
+            const slot = instance.find_empty_slot() orelse return error.RemapFull;
 
-            std.debug.assert(slot < capacity);
+            assert(slot < capacity);
 
-            self.mappings[slot] = mapping;
-            self.count += 1;
+            instance.mappings[slot] = mapping;
+            instance.count += 1;
 
-            std.debug.assert(self.count <= capacity);
-            std.debug.assert(self.mappings[slot] != null);
+            assert(instance.count <= capacity);
+            assert(instance.mappings[slot] != null);
 
             return slot;
         }
 
-        pub fn remove(self: *Self, slot: u32) !void {
-            self.mutex.lock();
-            defer self.mutex.unlock();
+        pub fn remove(instance: *Instance, slot: u32) !void {
+            instance.mutex.lock();
+            defer instance.mutex.unlock();
 
-            std.debug.assert(self.count <= capacity);
+            assert(instance.count <= capacity);
 
             if (slot >= capacity) {
                 return error.InvalidSlot;
             }
 
-            std.debug.assert(slot < capacity);
+            assert(slot < capacity);
 
-            if (self.mappings[slot] == null) {
+            if (instance.mappings[slot] == null) {
                 return error.NotFound;
             }
 
-            self.mappings[slot] = null;
-            self.count -= 1;
+            instance.mappings[slot] = null;
+            instance.count -= 1;
 
-            std.debug.assert(self.count <= capacity);
+            assert(instance.count <= capacity);
         }
 
-        pub fn process(self: *Self, key: *const Key, next: *const Next) Response {
-            std.debug.assert(key.is_valid());
+        pub fn process(instance: *Instance, key: *const Key, next: *const Next) Response {
+            assert(key.is_valid());
 
-            const found = self.find_mapping(key);
+            const found = instance.find_mapping(key);
 
             if (found) |mapping| {
                 var remapped = key.*;
@@ -103,7 +96,7 @@ pub fn RemapMiddleware(comptime capacity: u32) type {
                 remapped.value = mapping.to_key;
                 remapped.modifiers = mapping.to_modifiers;
 
-                std.debug.assert(remapped.is_valid());
+                assert(remapped.is_valid());
 
                 return next.invoke(&remapped);
             }
@@ -111,32 +104,32 @@ pub fn RemapMiddleware(comptime capacity: u32) type {
             return next.invoke(key);
         }
 
-        fn find_mapping(self: *Self, key: *const Key) ?Mapping {
-            std.debug.assert(key.is_valid());
+        fn find_mapping(instance: *Instance, key: *const Key) ?Mapping {
+            assert(key.is_valid());
 
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            instance.mutex.lock();
+            defer instance.mutex.unlock();
 
-            std.debug.assert(self.count <= capacity);
+            assert(instance.count <= capacity);
 
             var i: u32 = 0;
 
             while (i < capacity) : (i += 1) {
-                if (self.mappings[i]) |mapping| {
-                    if (self.matches(key, &mapping)) {
+                if (instance.mappings[i]) |mapping| {
+                    if (instance.matches(key, &mapping)) {
                         return mapping;
                     }
                 }
             }
 
-            std.debug.assert(i == capacity);
+            assert(i == capacity);
 
             return null;
         }
 
-        fn matches(_: *Self, key: *const Key, mapping: *const Mapping) bool {
-            std.debug.assert(key.is_valid());
-            std.debug.assert(mapping.from_modifiers.flags <= modifier.flag_all);
+        fn matches(_: *Instance, key: *const Key, mapping: *const Mapping) bool {
+            assert(key.is_valid());
+            assert(mapping.from_modifiers.flags <= modifier.flag_all);
 
             if (key.value != mapping.from_key) {
                 return false;
@@ -145,38 +138,150 @@ pub fn RemapMiddleware(comptime capacity: u32) type {
             return key.modifiers.eql(&mapping.from_modifiers);
         }
 
-        fn find_empty_slot(self: *const Self) ?u32 {
-            std.debug.assert(self.count <= capacity);
+        fn find_empty_slot(instance: *const Instance) ?u32 {
+            assert(instance.count <= capacity);
 
             var i: u32 = 0;
 
             while (i < capacity) : (i += 1) {
-                if (self.mappings[i] == null) {
+                if (instance.mappings[i] == null) {
                     return i;
                 }
             }
 
-            std.debug.assert(i == capacity);
+            assert(i == capacity);
 
             return null;
         }
 
-        pub fn clear(self: *Self) void {
-            self.mutex.lock();
-            defer self.mutex.unlock();
+        pub fn clear(instance: *Instance) void {
+            instance.mutex.lock();
+            defer instance.mutex.unlock();
 
-            std.debug.assert(self.count <= capacity);
+            assert(instance.count <= capacity);
 
             var i: u32 = 0;
 
             while (i < capacity) : (i += 1) {
-                self.mappings[i] = null;
+                instance.mappings[i] = null;
             }
 
-            self.count = 0;
+            instance.count = 0;
 
-            std.debug.assert(self.count == 0);
-            std.debug.assert(i == capacity);
+            assert(instance.count == 0);
+            assert(i == capacity);
         }
     };
+}
+
+const testing = std.testing;
+
+fn make_key(value: Keycode, mods: modifier.Set) Key {
+    return Key{
+        .value = value,
+        .down = true,
+        .injected = false,
+        .modifiers = mods,
+    };
+}
+
+const Capture = struct {
+    value: Keycode = .silent,
+    flags: u4 = 0,
+
+    fn call(context: *anyopaque, key: *const Key) Response {
+        const typed: *Capture = @ptrCast(@alignCast(context));
+
+        typed.value = key.value;
+        typed.flags = key.modifiers.to_bits();
+
+        return .pass;
+    }
+};
+
+test "a remap accepts a valid mapping" {
+    var remap = RemapMiddlewareType(4).init();
+
+    const slot = try remap.add(.{
+        .from_key = .a,
+        .from_modifiers = .{},
+        .to_key = .b,
+        .to_modifiers = .{},
+    });
+
+    try testing.expectEqual(@as(u32, 0), slot);
+    try testing.expectEqual(@as(u32, 1), remap.count);
+}
+
+test "a matching key is remapped" {
+    var remap = RemapMiddlewareType(4).init();
+
+    _ = try remap.add(.{
+        .from_key = .a,
+        .from_modifiers = .{},
+        .to_key = .b,
+        .to_modifiers = modifier.Set.from(.{ .ctrl = true }),
+    });
+
+    var capture = Capture{};
+
+    const next = Next{
+        .context = &capture,
+        .call = Capture.call,
+    };
+
+    const key = make_key(.a, .{});
+    const result = remap.process(&key, &next);
+
+    try testing.expectEqual(Response.pass, result);
+    try testing.expectEqual(.b, capture.value);
+    try testing.expectEqual(modifier.flag_ctrl, capture.flags);
+}
+
+test "an unmatched key passes through" {
+    var remap = RemapMiddlewareType(4).init();
+
+    _ = try remap.add(.{
+        .from_key = .a,
+        .from_modifiers = .{},
+        .to_key = .b,
+        .to_modifiers = .{},
+    });
+
+    var capture = Capture{};
+
+    const next = Next{
+        .context = &capture,
+        .call = Capture.call,
+    };
+
+    const key = make_key(.c, .{});
+    const result = remap.process(&key, &next);
+
+    try testing.expectEqual(Response.pass, result);
+    try testing.expectEqual(.c, capture.value);
+}
+
+test "removing a mapping leaves the other slots stable" {
+    var remap = RemapMiddlewareType(4).init();
+
+    const first_slot = try remap.add(.{
+        .from_key = .a,
+        .from_modifiers = .{},
+        .to_key = .b,
+        .to_modifiers = .{},
+    });
+
+    const second_slot = try remap.add(.{
+        .from_key = .c,
+        .from_modifiers = .{},
+        .to_key = .d,
+        .to_modifiers = .{},
+    });
+
+    try remap.remove(first_slot);
+    try remap.remove(second_slot);
+
+    try testing.expectEqual(@as(u32, 0), remap.count);
+    try testing.expectError(error.NotFound, remap.remove(second_slot));
 }

@@ -1,16 +1,38 @@
 const std = @import("std");
 
-const win32 = @import("win32").everything;
-const Mutex = @import("../mutex.zig").Mutex;
-
 const keycode = @import("../keycode.zig");
 const modifier = @import("../modifier.zig");
-const simulate_key = @import("../simulate/key.zig");
-const simulate_mouse = @import("../simulate/mouse.zig");
-const message = @import("../simulate/message.zig");
+const platform = @import("../platform.zig");
 const slot_mod = @import("../registry/slot.zig");
-const simulate_text = @import("../simulate/text.zig");
-const window = @import("../window.zig");
+
+const Mutex = @import("../sync.zig").Mutex;
+const assert = std.debug.assert;
+const Keycode = keycode.Keycode;
+const simulate_key = platform.backend.simulate.key;
+const simulate_mouse = platform.backend.simulate.mouse;
+const simulate_text = platform.backend.simulate.text;
+
+const targeted: bool = platform.capabilities.window_targeted_input;
+
+const Target = if (targeted) ?platform.backend.window.Handle else void;
+
+fn current_target() Target {
+    if (comptime !targeted) {
+        return {};
+    }
+
+    return platform.backend.window.get_focused();
+}
+
+fn release_target_modifiers(target: Target) void {
+    if (comptime !targeted) {
+        return;
+    }
+
+    if (target) |handle| {
+        _ = platform.backend.message.release_modifiers(handle);
+    }
+}
 
 pub const action_max: u16 = 256;
 pub const capacity_max: u8 = 32;
@@ -43,15 +65,16 @@ pub const ActionKind = enum(u8) {
     delay = 8,
     text = 9,
 
-    pub fn is_valid(self: ActionKind) bool {
-        const value = @intFromEnum(self);
+    pub fn is_valid(kind: ActionKind) bool {
+        const value = @intFromEnum(kind);
+
         return value <= 9;
     }
 };
 
 pub const Action = struct {
     kind: ActionKind = .key_press,
-    key: u8 = 0,
+    key: Keycode = .silent,
     modifiers: modifier.Set = .{},
     button: simulate_mouse.Button = .left,
     x: i32 = 0,
@@ -61,47 +84,42 @@ pub const Action = struct {
     text_start: u16 = 0,
     text_len: u8 = 0,
 
-    pub fn is_valid(self: *const Action) bool {
-        if (!self.kind.is_valid()) {
+    pub fn is_valid(action: *const Action) bool {
+        if (!action.kind.is_valid()) {
             return false;
         }
 
-        return switch (self.kind) {
-            .key_down, .key_up, .key_press => self.key >= 0x01 and self.key <= 0xFE,
+        return switch (action.kind) {
+            .key_down, .key_up, .key_press => true,
             .mouse_move => true,
-            .mouse_click, .mouse_down, .mouse_up => self.button.is_valid(),
-            .mouse_scroll => self.scroll_amount >= -scroll_amount_max and self.scroll_amount <= scroll_amount_max,
-            .delay => self.delay_ms <= delay_max_ms,
-            .text => self.text_len > 0,
+            .mouse_click, .mouse_down, .mouse_up => action.button.is_valid(),
+            .mouse_scroll => action.scroll_amount >= -scroll_amount_max and
+                action.scroll_amount <= scroll_amount_max,
+            .delay => action.delay_ms <= delay_max_ms,
+            .text => action.text_len > 0,
         };
     }
 
-    pub fn key_down(k: u8) Action {
-        std.debug.assert(k >= 0x01 and k <= 0xFE);
-
+    pub fn key_down(k: Keycode) Action {
         const result = Action{ .kind = .key_down, .key = k };
 
-        std.debug.assert(result.is_valid());
+        assert(result.is_valid());
 
         return result;
     }
 
-    pub fn key_up(k: u8) Action {
-        std.debug.assert(k >= 0x01 and k <= 0xFE);
-
+    pub fn key_up(k: Keycode) Action {
         const result = Action{ .kind = .key_up, .key = k };
 
-        std.debug.assert(result.is_valid());
+        assert(result.is_valid());
 
         return result;
     }
 
-    pub fn key_press(k: u8) Action {
-        std.debug.assert(k >= 0x01 and k <= 0xFE);
-
+    pub fn key_press(k: Keycode) Action {
         const result = Action{ .kind = .key_press, .key = k };
 
-        std.debug.assert(result.is_valid());
+        assert(result.is_valid());
 
         return result;
     }
@@ -109,58 +127,58 @@ pub const Action = struct {
     pub fn mouse_move(x: i32, y: i32) Action {
         const result = Action{ .kind = .mouse_move, .x = x, .y = y };
 
-        std.debug.assert(result.is_valid());
+        assert(result.is_valid());
 
         return result;
     }
 
     pub fn mouse_click(button: simulate_mouse.Button) Action {
-        std.debug.assert(button.is_valid());
+        assert(button.is_valid());
 
         const result = Action{ .kind = .mouse_click, .button = button };
 
-        std.debug.assert(result.is_valid());
+        assert(result.is_valid());
 
         return result;
     }
 
     pub fn mouse_down(button: simulate_mouse.Button) Action {
-        std.debug.assert(button.is_valid());
+        assert(button.is_valid());
 
         const result = Action{ .kind = .mouse_down, .button = button };
 
-        std.debug.assert(result.is_valid());
+        assert(result.is_valid());
 
         return result;
     }
 
     pub fn mouse_up(button: simulate_mouse.Button) Action {
-        std.debug.assert(button.is_valid());
+        assert(button.is_valid());
 
         const result = Action{ .kind = .mouse_up, .button = button };
 
-        std.debug.assert(result.is_valid());
+        assert(result.is_valid());
 
         return result;
     }
 
     pub fn mouse_scroll(amount: i32) Action {
-        std.debug.assert(amount >= -scroll_amount_max);
-        std.debug.assert(amount <= scroll_amount_max);
+        assert(amount >= -scroll_amount_max);
+        assert(amount <= scroll_amount_max);
 
         const result = Action{ .kind = .mouse_scroll, .scroll_amount = amount };
 
-        std.debug.assert(result.is_valid());
+        assert(result.is_valid());
 
         return result;
     }
 
     pub fn delay(ms: u32) Action {
-        std.debug.assert(ms <= delay_max_ms);
+        assert(ms <= delay_max_ms);
 
         const result = Action{ .kind = .delay, .delay_ms = ms };
 
-        std.debug.assert(result.is_valid());
+        assert(result.is_valid());
 
         return result;
     }
@@ -178,46 +196,49 @@ pub const Macro = struct {
     repeat_count: u32 = 1,
     delay_between_ms: u32 = 0,
 
-    pub fn get_id(self: *const Macro) u32 {
-        return self.id;
+    pub fn get_id(macro: *const Macro) u32 {
+        return macro.id;
     }
 
-    pub fn is_active(self: *const Macro) bool {
-        return self.active;
+    pub fn is_active(macro: *const Macro) bool {
+        return macro.active;
     }
 
-    pub fn is_valid(self: *const Macro) bool {
-        if (!self.active) {
+    pub fn is_valid(macro: *const Macro) bool {
+        if (!macro.active) {
             return true;
         }
 
-        const valid_name = self.name_len > 0 and self.name_len <= name_max;
-        const valid_actions = self.action_count <= action_max;
-        const valid_text = self.text_len <= text_buffer_max;
-        const valid_repeat = self.repeat_count <= repeat_max;
-        const valid_delay = self.delay_between_ms <= delay_max_ms;
-        const valid_id = self.id >= 1;
+        const valid_name = macro.name_len > 0 and macro.name_len <= name_max;
+        const valid_actions = macro.action_count <= action_max;
+        const valid_text = macro.text_len <= text_buffer_max;
+        const valid_repeat = macro.repeat_count <= repeat_max;
+        const valid_delay = macro.delay_between_ms <= delay_max_ms;
+        const valid_id = macro.id >= 1;
 
-        if (!valid_name or !valid_actions or !valid_text or !valid_repeat or !valid_delay or !valid_id) {
+        const valid_fields = valid_name and valid_actions and valid_text;
+        const valid_limits = valid_repeat and valid_delay and valid_id;
+
+        if (!valid_fields or !valid_limits) {
             return false;
         }
 
-        return self.validate_actions();
+        return macro.validate_actions();
     }
 
-    fn validate_actions(self: *const Macro) bool {
+    fn validate_actions(macro: *const Macro) bool {
         var i: u16 = 0;
 
-        while (i < self.action_count) : (i += 1) {
-            if (!self.actions[i].is_valid()) {
+        while (i < macro.action_count) : (i += 1) {
+            if (!macro.actions[i].is_valid()) {
                 return false;
             }
 
-            if (self.actions[i].kind == .text) {
-                const start = self.actions[i].text_start;
-                const len = self.actions[i].text_len;
+            if (macro.actions[i].kind == .text) {
+                const start = macro.actions[i].text_start;
+                const len = macro.actions[i].text_len;
 
-                if (start + @as(u16, len) > self.text_len) {
+                if (start + @as(u16, len) > macro.text_len) {
                     return false;
                 }
             }
@@ -226,61 +247,61 @@ pub const Macro = struct {
         return true;
     }
 
-    pub fn get_name(self: *const Macro) []const u8 {
-        std.debug.assert(self.name_len <= name_max);
+    pub fn get_name(macro: *const Macro) []const u8 {
+        assert(macro.name_len <= name_max);
 
-        return self.name[0..self.name_len];
+        return macro.name[0..macro.name_len];
     }
 
-    pub fn get_text(self: *const Macro, action: *const Action) []const u8 {
-        std.debug.assert(action.kind == .text);
-        std.debug.assert(action.text_start < text_buffer_max);
-        std.debug.assert(action.text_start + @as(u16, action.text_len) <= self.text_len);
+    pub fn get_text(macro: *const Macro, action: *const Action) []const u8 {
+        assert(action.kind == .text);
+        assert(action.text_start < text_buffer_max);
+        assert(action.text_start + @as(u16, action.text_len) <= macro.text_len);
 
         const start = action.text_start;
         const end = start + @as(u16, action.text_len);
 
-        std.debug.assert(end <= text_buffer_max);
+        assert(end <= text_buffer_max);
 
-        return self.text_buffer[start..end];
+        return macro.text_buffer[start..end];
     }
 
-    pub fn remaining_action_capacity(self: *const Macro) u16 {
-        std.debug.assert(self.action_count <= action_max);
+    pub fn remaining_action_capacity(macro: *const Macro) u16 {
+        assert(macro.action_count <= action_max);
 
-        return action_max - self.action_count;
+        return action_max - macro.action_count;
     }
 
-    pub fn remaining_text_capacity(self: *const Macro) u16 {
-        std.debug.assert(self.text_len <= text_buffer_max);
+    pub fn remaining_text_capacity(macro: *const Macro) u16 {
+        assert(macro.text_len <= text_buffer_max);
 
-        return text_buffer_max - self.text_len;
+        return text_buffer_max - macro.text_len;
     }
 
-    pub fn add_action(self: *Macro, action: Action) Error!void {
-        std.debug.assert(action.is_valid());
-        std.debug.assert(self.action_count <= action_max);
+    pub fn add_action(macro: *Macro, action: Action) Error!void {
+        assert(action.is_valid());
+        assert(macro.action_count <= action_max);
 
-        if (self.action_count >= action_max) {
+        if (macro.action_count >= action_max) {
             return Error.BufferFull;
         }
 
-        const slot = self.action_count;
+        const slot = macro.action_count;
 
-        self.actions[slot] = action;
-        self.action_count += 1;
+        macro.actions[slot] = action;
+        macro.action_count += 1;
 
-        std.debug.assert(self.action_count >= 1);
-        std.debug.assert(self.action_count <= action_max);
-        std.debug.assert(self.actions[slot].is_valid());
+        assert(macro.action_count >= 1);
+        assert(macro.action_count <= action_max);
+        assert(macro.actions[slot].is_valid());
     }
 
-    pub fn add_text(self: *Macro, text: []const u8) Error!void {
-        std.debug.assert(text.len > 0);
-        std.debug.assert(self.action_count <= action_max);
-        std.debug.assert(self.text_len <= text_buffer_max);
+    pub fn add_text(macro: *Macro, text: []const u8) Error!void {
+        assert(text.len > 0);
+        assert(macro.action_count <= action_max);
+        assert(macro.text_len <= text_buffer_max);
 
-        if (self.action_count >= action_max) {
+        if (macro.action_count >= action_max) {
             return Error.BufferFull;
         }
 
@@ -291,19 +312,19 @@ pub const Macro = struct {
         const text_len_u8: u8 = @intCast(text.len);
         const text_len_u16: u16 = @intCast(text.len);
 
-        if (self.text_len + text_len_u16 > text_buffer_max) {
+        if (macro.text_len + text_len_u16 > text_buffer_max) {
             return Error.BufferFull;
         }
 
-        const start = self.text_len;
+        const start = macro.text_len;
         const end = start + text_len_u16;
 
-        std.debug.assert(end <= text_buffer_max);
-        std.debug.assert(start < end);
+        assert(end <= text_buffer_max);
+        assert(start < end);
 
-        @memcpy(self.text_buffer[start..end], text[0..text_len_u16]);
+        @memcpy(macro.text_buffer[start..end], text[0..text_len_u16]);
 
-        self.text_len = end;
+        macro.text_len = end;
 
         const action = Action{
             .kind = .text,
@@ -311,20 +332,20 @@ pub const Macro = struct {
             .text_len = text_len_u8,
         };
 
-        std.debug.assert(action.is_valid());
+        assert(action.is_valid());
 
-        self.actions[self.action_count] = action;
-        self.action_count += 1;
+        macro.actions[macro.action_count] = action;
+        macro.action_count += 1;
 
-        std.debug.assert(self.text_len <= text_buffer_max);
-        std.debug.assert(self.action_count <= action_max);
+        assert(macro.text_len <= text_buffer_max);
+        assert(macro.action_count <= action_max);
     }
 
-    pub fn add_line(self: *Macro, text: []const u8) Error!void {
-        std.debug.assert(self.action_count <= action_max);
-        std.debug.assert(self.text_len <= text_buffer_max);
+    pub fn add_line(macro: *Macro, text: []const u8) Error!void {
+        assert(macro.action_count <= action_max);
+        assert(macro.text_len <= text_buffer_max);
 
-        if (self.action_count >= action_max) {
+        if (macro.action_count >= action_max) {
             return Error.BufferFull;
         }
 
@@ -337,18 +358,18 @@ pub const Macro = struct {
         const text_len_u16: u16 = @intCast(text.len);
         const len_total: u16 = text_len_u16 + 1;
 
-        if (self.text_len + len_total > text_buffer_max) {
+        if (macro.text_len + len_total > text_buffer_max) {
             return Error.BufferFull;
         }
 
-        const start = self.text_len;
+        const start = macro.text_len;
 
-        std.debug.assert(start + text_len_u16 < text_buffer_max);
+        assert(start + text_len_u16 < text_buffer_max);
 
-        @memcpy(self.text_buffer[start .. start + text_len_u16], text[0..text_len_u16]);
-        self.text_buffer[start + text_len_u16] = '\n';
+        @memcpy(macro.text_buffer[start .. start + text_len_u16], text[0..text_len_u16]);
+        macro.text_buffer[start + text_len_u16] = '\n';
 
-        self.text_len += len_total;
+        macro.text_len += len_total;
 
         const action = Action{
             .kind = .text,
@@ -356,44 +377,44 @@ pub const Macro = struct {
             .text_len = @intCast(len_total),
         };
 
-        std.debug.assert(action.is_valid());
+        assert(action.is_valid());
 
-        self.actions[self.action_count] = action;
-        self.action_count += 1;
+        macro.actions[macro.action_count] = action;
+        macro.action_count += 1;
 
-        std.debug.assert(self.text_len <= text_buffer_max);
-        std.debug.assert(self.action_count <= action_max);
+        assert(macro.text_len <= text_buffer_max);
+        assert(macro.action_count <= action_max);
     }
 
-    pub fn add_newline(self: *Macro) Error!void {
-        try self.add_text("\n");
+    pub fn add_newline(macro: *Macro) Error!void {
+        try macro.add_text("\n");
     }
 
-    pub fn clear_actions(self: *Macro) void {
-        std.debug.assert(self.action_count <= action_max);
-        std.debug.assert(self.text_len <= text_buffer_max);
+    pub fn clear_actions(macro: *Macro) void {
+        assert(macro.action_count <= action_max);
+        assert(macro.text_len <= text_buffer_max);
 
-        self.action_count = 0;
-        self.text_len = 0;
+        macro.action_count = 0;
+        macro.text_len = 0;
 
-        std.debug.assert(self.action_count == 0);
-        std.debug.assert(self.text_len == 0);
+        assert(macro.action_count == 0);
+        assert(macro.text_len == 0);
     }
 };
 
-pub fn MacroRegistry(comptime capacity: u8) type {
+pub fn MacroRegistryType(comptime capacity: u8) type {
     if (capacity == 0) {
-        @compileError("MacroRegistry capacity must be at least 1");
+        @compileError("MacroRegistryType capacity must be at least 1");
     }
 
     if (capacity > capacity_max) {
-        @compileError("MacroRegistry capacity exceeds maximum");
+        @compileError("MacroRegistryType capacity exceeds maximum");
     }
 
     return struct {
-        const Self = @This();
+        const Instance = @This();
 
-        const Slot = slot_mod.SlotManager(Macro, capacity);
+        const Slot = slot_mod.SlotManagerType(Macro, capacity);
 
         slot: Slot = Slot.init(),
 
@@ -409,28 +430,28 @@ pub fn MacroRegistry(comptime capacity: u8) type {
 
         mutex: Mutex = .{},
 
-        pub fn init() Self {
-            return Self{};
+        pub fn init() Instance {
+            return Instance{};
         }
 
-        pub fn is_valid(self: *const Self) bool {
-            return self.slot.is_valid();
+        pub fn is_valid(instance: *const Instance) bool {
+            return instance.slot.is_valid();
         }
 
-        pub fn create(self: *Self, name: []const u8) Error!u32 {
-            std.debug.assert(self.is_valid());
+        pub fn create(instance: *Instance, name: []const u8) Error!u32 {
+            assert(instance.is_valid());
 
             if (name.len == 0 or name.len > name_max) {
                 return Error.InvalidName;
             }
 
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            instance.mutex.lock();
+            defer instance.mutex.unlock();
 
-            const allocation = self.slot.allocate() orelse return Error.RegistryFull;
+            const allocation = instance.slot.allocate() orelse return Error.RegistryFull;
 
-            std.debug.assert(allocation.slot < capacity);
-            std.debug.assert(allocation.id >= 1);
+            assert(allocation.slot < capacity);
+            assert(allocation.id >= 1);
 
             const name_len: u8 = @intCast(name.len);
 
@@ -442,27 +463,27 @@ pub fn MacroRegistry(comptime capacity: u8) type {
 
             @memcpy(macro.name[0..name_len], name);
 
-            std.debug.assert(macro.is_valid());
+            assert(macro.is_valid());
 
-            self.slot.entries[allocation.slot] = macro;
+            instance.slot.entries[allocation.slot] = macro;
 
             return allocation.id;
         }
 
-        pub fn get(self: *Self, id: u32) ?*Macro {
-            std.debug.assert(self.is_valid());
-            std.debug.assert(id >= 1);
+        pub fn get(instance: *Instance, id: u32) ?*Macro {
+            assert(instance.is_valid());
+            assert(id >= 1);
 
-            return self.slot.get_by_id(id);
+            return instance.slot.get_by_id(id);
         }
 
-        pub fn find_by_name(self: *Self, name: []const u8) ?*Macro {
-            std.debug.assert(self.is_valid());
+        pub fn find_by_name(instance: *Instance, name: []const u8) ?*Macro {
+            assert(instance.is_valid());
 
             var i: u8 = 0;
 
             while (i < capacity) : (i += 1) {
-                const entry = &self.slot.entries[i];
+                const entry = &instance.slot.entries[i];
 
                 if (!entry.active) {
                     continue;
@@ -480,110 +501,110 @@ pub fn MacroRegistry(comptime capacity: u8) type {
             return null;
         }
 
-        pub fn delete(self: *Self, id: u32) Error!void {
-            std.debug.assert(self.is_valid());
-            std.debug.assert(id >= 1);
+        pub fn delete(instance: *Instance, id: u32) Error!void {
+            assert(instance.is_valid());
+            assert(id >= 1);
 
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            instance.mutex.lock();
+            defer instance.mutex.unlock();
 
-            const freed = self.slot.free_by_id(id) orelse return Error.NotFound;
+            const freed = instance.slot.free_by_id(id) orelse return Error.NotFound;
 
-            std.debug.assert(freed < capacity);
+            assert(freed < capacity);
         }
 
-        pub fn play(self: *Self, id: u32) Error!void {
-            std.debug.assert(self.is_valid());
-            std.debug.assert(id >= 1);
+        pub fn play(instance: *Instance, id: u32) Error!void {
+            assert(instance.is_valid());
+            assert(id >= 1);
 
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            instance.mutex.lock();
+            defer instance.mutex.unlock();
 
-            if (self.playing.load(.acquire)) {
+            if (instance.playing.load(.seq_cst)) {
                 return Error.AlreadyActive;
             }
 
-            if (self.play_thread) |thread| {
+            if (instance.play_thread) |thread| {
                 thread.join();
-                self.play_thread = null;
+                instance.play_thread = null;
             }
 
-            std.debug.assert(self.play_thread == null);
+            assert(instance.play_thread == null);
 
-            const slot = self.slot.find_by_id(id) orelse return Error.NotFound;
+            const slot = instance.slot.find_by_id(id) orelse return Error.NotFound;
 
-            self.playing.store(true, .release);
-            self.playing_slot = @intCast(slot);
+            instance.playing.store(true, .seq_cst);
+            instance.playing_slot = @intCast(slot);
 
-            self.play_thread = std.Thread.spawn(.{}, play_thread_fn, .{self}) catch {
-                self.playing.store(false, .release);
-                self.playing_slot = null;
+            instance.play_thread = std.Thread.spawn(.{}, play_thread_fn, .{instance}) catch {
+                instance.playing.store(false, .seq_cst);
+                instance.playing_slot = null;
                 return Error.NotActive;
             };
         }
 
-        pub fn play_by_name(self: *Self, name: []const u8) bool {
-            std.debug.assert(self.is_valid());
+        pub fn play_by_name(instance: *Instance, name: []const u8) bool {
+            assert(instance.is_valid());
 
             if (name.len == 0 or name.len > name_max) {
                 return false;
             }
 
-            self.mutex.lock();
+            instance.mutex.lock();
 
-            const macro = self.find_by_name(name) orelse {
-                self.mutex.unlock();
+            const macro = instance.find_by_name(name) orelse {
+                instance.mutex.unlock();
 
                 return false;
             };
 
             const id = macro.get_id();
 
-            self.mutex.unlock();
+            instance.mutex.unlock();
 
-            std.debug.assert(id >= 1);
+            assert(id >= 1);
 
-            self.play(id) catch return false;
+            instance.play(id) catch return false;
 
             return true;
         }
 
-        pub fn stop(self: *Self) void {
-            std.debug.assert(self.is_valid());
+        pub fn stop(instance: *Instance) void {
+            assert(instance.is_valid());
 
-            self.mutex.lock();
+            instance.mutex.lock();
 
-            self.playing.store(false, .release);
+            instance.playing.store(false, .seq_cst);
 
-            const thread = self.play_thread;
-            self.play_thread = null;
+            const thread = instance.play_thread;
+            instance.play_thread = null;
 
-            self.mutex.unlock();
+            instance.mutex.unlock();
 
             if (thread) |t| {
                 t.join();
             }
         }
 
-        pub fn is_playing(self: *Self) bool {
-            return self.playing.load(.acquire);
+        pub fn is_playing(instance: *Instance) bool {
+            return instance.playing.load(.seq_cst);
         }
 
-        fn play_thread_fn(self: *Self) void {
-            self.mutex.lock();
+        fn play_thread_fn(instance: *Instance) void {
+            instance.mutex.lock();
 
-            const slot = self.playing_slot orelse {
-                self.playing.store(false, .release);
-                self.playing_slot = null;
-                self.mutex.unlock();
+            const slot = instance.playing_slot orelse {
+                instance.playing.store(false, .seq_cst);
+                instance.playing_slot = null;
+                instance.mutex.unlock();
                 return;
             };
 
-            std.debug.assert(self.slot.entries[slot].is_valid());
+            assert(instance.slot.entries[slot].is_valid());
 
-            const macro = self.slot.entries[slot];
+            const macro = instance.slot.entries[slot];
 
-            self.mutex.unlock();
+            instance.mutex.unlock();
 
             const repeats: u32 = if (macro.repeat_count == 0) 1 else macro.repeat_count;
             const delay_between = macro.delay_between_ms;
@@ -591,163 +612,177 @@ pub fn MacroRegistry(comptime capacity: u8) type {
             var r: u32 = 0;
 
             while (r < repeats) : (r += 1) {
-                self.mutex.lock();
+                instance.mutex.lock();
 
-                if (!self.playing.load(.acquire)) {
-                    self.playing_slot = null;
-                    self.mutex.unlock();
+                if (!instance.playing.load(.seq_cst)) {
+                    instance.playing_slot = null;
+                    instance.mutex.unlock();
                     return;
                 }
 
-                self.mutex.unlock();
+                instance.mutex.unlock();
 
-                self.execute_macro(&macro);
+                instance.execute_macro(&macro);
 
-                if (!self.playing.load(.acquire)) {
+                if (!instance.playing.load(.seq_cst)) {
                     break;
                 }
 
                 if (delay_between > 0 and r < repeats - 1) {
-                    win32.Sleep(delay_between);
+                    platform.backend.time.sleep_ms(delay_between);
                 }
             }
 
-            self.mutex.lock();
-            self.playing.store(false, .release);
-            self.playing_slot = null;
-            self.mutex.unlock();
+            instance.mutex.lock();
+            instance.playing.store(false, .seq_cst);
+            instance.playing_slot = null;
+            instance.mutex.unlock();
         }
 
-        fn execute_macro(self: *Self, macro: *const Macro) void {
-            std.debug.assert(macro.is_valid());
-            std.debug.assert(macro.action_count <= action_max);
+        fn execute_macro(instance: *Instance, macro: *const Macro) void {
+            assert(macro.is_valid());
+            assert(macro.action_count <= action_max);
 
-            const hwnd = window.get_focused();
+            const target = current_target();
 
-            if (hwnd) |h| {
-                _ = message.release_modifiers(h);
-            }
+            release_target_modifiers(target);
 
             var i: u16 = 0;
 
             while (i < macro.action_count) : (i += 1) {
-                if (!self.playing.load(.acquire)) {
+                if (!instance.playing.load(.seq_cst)) {
                     return;
                 }
 
-                std.debug.assert(i < action_max);
+                assert(i < action_max);
 
                 const action = &macro.actions[i];
 
-                std.debug.assert(action.is_valid());
+                assert(action.is_valid());
 
-                execute_action(action, macro, hwnd);
+                execute_action(action, macro, target);
             }
         }
 
-        pub fn clear(self: *Self) void {
-            std.debug.assert(self.is_valid());
+        pub fn clear(instance: *Instance) void {
+            assert(instance.is_valid());
 
-            self.stop();
+            instance.stop();
 
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            instance.mutex.lock();
+            defer instance.mutex.unlock();
 
-            if (self.recording) {
-                self.recording = false;
-                self.recording_slot = null;
+            if (instance.recording) {
+                instance.recording = false;
+                instance.recording_slot = null;
             }
 
-            self.slot.clear();
+            instance.slot.clear();
 
-            std.debug.assert(!self.recording);
-            std.debug.assert(!self.playing.load(.acquire));
-            std.debug.assert(self.is_valid());
+            assert(!instance.recording);
+            assert(!instance.playing.load(.seq_cst));
+            assert(instance.is_valid());
         }
     };
 }
 
-fn execute_action(action: *const Action, macro: *const Macro, hwnd: ?win32.HWND) void {
-    std.debug.assert(action.is_valid());
-    std.debug.assert(macro.is_valid());
+fn execute_action(action: *const Action, macro: *const Macro, target: Target) void {
+    assert(action.is_valid());
+    assert(macro.is_valid());
 
     switch (action.kind) {
-        .key_down => execute_key_down(action, hwnd),
-        .key_up => execute_key_up(action, hwnd),
-        .key_press => execute_key_press(action, hwnd),
+        .key_down => execute_key_down(action, target),
+        .key_up => execute_key_up(action, target),
+        .key_press => execute_key_press(action, target),
         .mouse_move => execute_mouse_move(action),
         .mouse_click => execute_mouse_click(action),
         .mouse_down => execute_mouse_down(action),
         .mouse_up => execute_mouse_up(action),
         .mouse_scroll => execute_mouse_scroll(action),
         .delay => execute_delay(action),
-        .text => execute_text(action, macro, hwnd),
+        .text => execute_text(action, macro, target),
     }
 }
 
-fn execute_key_down(action: *const Action, hwnd: ?win32.HWND) void {
-    std.debug.assert(action.kind == .key_down);
+fn execute_key_down(action: *const Action, target: Target) void {
+    assert(action.kind == .key_down);
 
-    if (hwnd) |h| {
-        _ = message.send_key(h, action.key, true);
-    } else {
-        _ = simulate_key.key_down(action.key);
+    if (comptime targeted) {
+        if (target) |handle| {
+            _ = platform.backend.message.send_key(handle, action.key, true);
+
+            return;
+        }
     }
+
+    _ = simulate_key.key_down(action.key);
 }
 
-fn execute_key_up(action: *const Action, hwnd: ?win32.HWND) void {
-    std.debug.assert(action.kind == .key_up);
+fn execute_key_up(action: *const Action, target: Target) void {
+    assert(action.kind == .key_up);
 
-    if (hwnd) |h| {
-        _ = message.send_key(h, action.key, false);
-    } else {
-        _ = simulate_key.key_up(action.key);
+    if (comptime targeted) {
+        if (target) |handle| {
+            _ = platform.backend.message.send_key(handle, action.key, false);
+
+            return;
+        }
     }
+
+    _ = simulate_key.key_up(action.key);
 }
 
-fn execute_key_press(action: *const Action, hwnd: ?win32.HWND) void {
-    std.debug.assert(action.kind == .key_press);
+fn execute_key_press(action: *const Action, target: Target) void {
+    assert(action.kind == .key_press);
 
     if (action.modifiers.any()) {
         _ = simulate_key.combination(&action.modifiers, action.key);
-    } else if (hwnd) |h| {
-        _ = message.send_key_press(h, action.key);
-    } else {
-        _ = simulate_key.press(action.key);
+
+        return;
     }
+
+    if (comptime targeted) {
+        if (target) |handle| {
+            _ = platform.backend.message.send_key_press(handle, action.key);
+
+            return;
+        }
+    }
+
+    _ = simulate_key.press(action.key);
 }
 
 fn execute_mouse_move(action: *const Action) void {
-    std.debug.assert(action.kind == .mouse_move);
+    assert(action.kind == .mouse_move);
 
     _ = simulate_mouse.move_to(action.x, action.y);
 }
 
 fn execute_mouse_click(action: *const Action) void {
-    std.debug.assert(action.kind == .mouse_click);
-    std.debug.assert(action.button.is_valid());
+    assert(action.kind == .mouse_click);
+    assert(action.button.is_valid());
 
     _ = simulate_mouse.click(action.button);
 }
 
 fn execute_mouse_down(action: *const Action) void {
-    std.debug.assert(action.kind == .mouse_down);
-    std.debug.assert(action.button.is_valid());
+    assert(action.kind == .mouse_down);
+    assert(action.button.is_valid());
 
     _ = simulate_mouse.button_down(action.button);
 }
 
 fn execute_mouse_up(action: *const Action) void {
-    std.debug.assert(action.kind == .mouse_up);
-    std.debug.assert(action.button.is_valid());
+    assert(action.kind == .mouse_up);
+    assert(action.button.is_valid());
 
     _ = simulate_mouse.button_up(action.button);
 }
 
 fn execute_mouse_scroll(action: *const Action) void {
-    std.debug.assert(action.kind == .mouse_scroll);
-    std.debug.assert(action.scroll_amount >= -scroll_amount_max);
-    std.debug.assert(action.scroll_amount <= scroll_amount_max);
+    assert(action.kind == .mouse_scroll);
+    assert(action.scroll_amount >= -scroll_amount_max);
+    assert(action.scroll_amount <= scroll_amount_max);
 
     if (action.scroll_amount > 0) {
         _ = simulate_mouse.scroll_up(@intCast(action.scroll_amount));
@@ -759,45 +794,227 @@ fn execute_mouse_scroll(action: *const Action) void {
 }
 
 fn execute_delay(action: *const Action) void {
-    std.debug.assert(action.kind == .delay);
-    std.debug.assert(action.delay_ms <= delay_max_ms);
+    assert(action.kind == .delay);
+    assert(action.delay_ms <= delay_max_ms);
 
     if (action.delay_ms > 0) {
-        win32.Sleep(action.delay_ms);
+        platform.backend.time.sleep_ms(action.delay_ms);
     }
 }
 
-fn execute_text(action: *const Action, macro: *const Macro, hwnd: ?win32.HWND) void {
-    std.debug.assert(action.kind == .text);
-    std.debug.assert(action.text_start < text_buffer_max);
-    std.debug.assert(action.text_start + @as(u16, action.text_len) <= macro.text_len);
+fn execute_text(action: *const Action, macro: *const Macro, target: Target) void {
+    assert(action.kind == .text);
+    assert(action.text_start < text_buffer_max);
+    assert(action.text_start + @as(u16, action.text_len) <= macro.text_len);
 
     const text = macro.get_text(action);
 
-    if (hwnd) |h| {
-        execute_text_via_message(text, h);
-    } else {
-        execute_text_via_simulate(text);
+    if (comptime targeted) {
+        if (target) |handle| {
+            execute_text_via_message(text, handle);
+
+            return;
+        }
     }
+
+    execute_text_via_simulate(text);
 }
 
-fn execute_text_via_message(text: []const u8, hwnd: win32.HWND) void {
+fn execute_text_via_message(text: []const u8, handle: platform.backend.window.Handle) void {
+    const message = platform.backend.message;
+
     for (text) |char| {
         if (char == '\r') {
             continue;
         }
 
         if (char == '\n') {
-            _ = message.send_key_press(hwnd, keycode.@"return");
+            _ = message.send_key_press(handle, Keycode.enter);
             continue;
         }
 
-        _ = message.send_char(hwnd, char);
+        _ = message.send_char(handle, char);
     }
 }
 
 fn execute_text_via_simulate(text: []const u8) void {
-    std.debug.assert(text.len <= simulate_text.text_max);
+    assert(text.len <= simulate_text.text_max);
 
-    _ = simulate_text.send(text) catch {};
+    _ = simulate_text.send(text) catch return;
+}
+
+const testing = std.testing;
+
+test "a key down action is valid" {
+    try testing.expect(ActionKind.key_down.is_valid());
+}
+
+test "a key up action is valid" {
+    try testing.expect(ActionKind.key_up.is_valid());
+}
+
+test "a key press action is valid" {
+    try testing.expect(ActionKind.key_press.is_valid());
+}
+
+test "a mouse move action is valid" {
+    try testing.expect(ActionKind.mouse_move.is_valid());
+}
+
+test "a mouse click action is valid" {
+    try testing.expect(ActionKind.mouse_click.is_valid());
+}
+
+test "a mouse down action is valid" {
+    try testing.expect(ActionKind.mouse_down.is_valid());
+}
+
+test "a mouse up action is valid" {
+    try testing.expect(ActionKind.mouse_up.is_valid());
+}
+
+test "a mouse scroll action is valid" {
+    try testing.expect(ActionKind.mouse_scroll.is_valid());
+}
+
+test "a delay action is valid" {
+    try testing.expect(ActionKind.delay.is_valid());
+}
+
+test "a text action is valid" {
+    try testing.expect(ActionKind.text.is_valid());
+}
+
+test "the action kinds are stable" {
+    try testing.expectEqual(@as(u8, 0), @intFromEnum(ActionKind.key_down));
+    try testing.expectEqual(@as(u8, 1), @intFromEnum(ActionKind.key_up));
+    try testing.expectEqual(@as(u8, 2), @intFromEnum(ActionKind.key_press));
+    try testing.expectEqual(@as(u8, 3), @intFromEnum(ActionKind.mouse_move));
+    try testing.expectEqual(@as(u8, 4), @intFromEnum(ActionKind.mouse_click));
+    try testing.expectEqual(@as(u8, 5), @intFromEnum(ActionKind.mouse_down));
+    try testing.expectEqual(@as(u8, 6), @intFromEnum(ActionKind.mouse_up));
+    try testing.expectEqual(@as(u8, 7), @intFromEnum(ActionKind.mouse_scroll));
+    try testing.expectEqual(@as(u8, 8), @intFromEnum(ActionKind.delay));
+    try testing.expectEqual(@as(u8, 9), @intFromEnum(ActionKind.text));
+}
+
+test "a default action is empty" {
+    const action = Action{};
+
+    try testing.expectEqual(ActionKind.key_press, action.kind);
+    try testing.expectEqual(Keycode.silent, action.key);
+    try testing.expect(action.modifiers.none());
+}
+
+test "a key down action carries its key" {
+    const action = Action.key_down(.a);
+
+    try testing.expect(action.is_valid());
+    try testing.expectEqual(ActionKind.key_down, action.kind);
+    try testing.expectEqual(.a, action.key);
+}
+
+test "a key up action carries its key" {
+    const action = Action.key_up(.b);
+
+    try testing.expect(action.is_valid());
+    try testing.expectEqual(ActionKind.key_up, action.kind);
+    try testing.expectEqual(.b, action.key);
+}
+
+test "a key press action carries its key" {
+    const action = Action.key_press(.c);
+
+    try testing.expect(action.is_valid());
+    try testing.expectEqual(ActionKind.key_press, action.kind);
+    try testing.expectEqual(.c, action.key);
+}
+
+test "a mouse move action carries its position" {
+    const action = Action.mouse_move(100, 200);
+
+    try testing.expect(action.is_valid());
+    try testing.expectEqual(ActionKind.mouse_move, action.kind);
+    try testing.expectEqual(@as(i32, 100), action.x);
+    try testing.expectEqual(@as(i32, 200), action.y);
+}
+
+test "a mouse scroll action carries its amount" {
+    const action = Action.mouse_scroll(120);
+
+    try testing.expect(action.is_valid());
+    try testing.expectEqual(ActionKind.mouse_scroll, action.kind);
+    try testing.expectEqual(@as(i32, 120), action.scroll_amount);
+}
+
+test "a mouse scroll action carries a negative amount" {
+    const action = Action.mouse_scroll(-120);
+
+    try testing.expect(action.is_valid());
+    try testing.expectEqual(@as(i32, -120), action.scroll_amount);
+}
+
+test "a delay action carries its duration" {
+    const action = Action.delay(500);
+
+    try testing.expect(action.is_valid());
+    try testing.expectEqual(ActionKind.delay, action.kind);
+    try testing.expectEqual(@as(u32, 500), action.delay_ms);
+}
+
+test "an action carries the text it is built with" {
+    const action = Action{
+        .kind = .text,
+        .text_start = 0,
+        .text_len = 10,
+    };
+
+    try testing.expect(action.is_valid());
+}
+
+test "an action carries the modifiers it is built with" {
+    const action = Action{
+        .kind = .key_press,
+        .key = .s,
+        .modifiers = modifier.Set.from(.{ .ctrl = true }),
+    };
+
+    try testing.expect(action.is_valid());
+    try testing.expect(action.modifiers.ctrl());
+}
+
+test "macro constants" {
+    try testing.expect(action_max >= 1);
+    try testing.expect(capacity_max >= 1);
+    try testing.expect(name_max >= 1);
+    try testing.expect(text_buffer_max >= 1);
+    try testing.expect(delay_default_ms > 0);
+    try testing.expect(delay_max_ms >= delay_default_ms);
+    try testing.expect(repeat_max >= 1);
+}
+
+test "play_by_name returns false for an unknown name" {
+    var registry = MacroRegistryType(4).init();
+
+    try testing.expect(!registry.play_by_name("missing"));
+}
+
+test "play_by_name returns false for an out of range name length" {
+    var registry = MacroRegistryType(4).init();
+
+    const name_long = "a" ** (name_max + 1);
+
+    try testing.expect(!registry.play_by_name(""));
+    try testing.expect(!registry.play_by_name(name_long));
+}
+
+test "find_by_name locates a macro that was created" {
+    var registry = MacroRegistryType(4).init();
+
+    const id = try registry.create("copy_all");
+
+    const found = registry.find_by_name("copy_all") orelse unreachable;
+
+    try testing.expectEqual(id, found.get_id());
+    try testing.expect(registry.find_by_name("other") == null);
 }

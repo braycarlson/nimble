@@ -1,9 +1,11 @@
 const std = @import("std");
 
-const win32 = @import("win32").everything;
-
 const keycode = @import("keycode.zig");
 const modifier = @import("modifier.zig");
+const platform = @import("platform.zig");
+
+const assert = std.debug.assert;
+const Keycode = keycode.Keycode;
 
 pub const flag_count: u32 = 2;
 pub const bits_per_flag: u8 = 128;
@@ -12,202 +14,189 @@ pub const active_count_max: u8 = 32;
 
 pub const Keyboard = struct {
     flags: [flag_count]u128 = .{ 0, 0 },
-    keys_active: [active_count_max]u8 = [_]u8{0} ** active_count_max,
+    keys_active: [active_count_max]Keycode = @splat(.silent),
     active_count: u8 = 0,
 
     pub fn init() Keyboard {
         const result = Keyboard{};
 
-        std.debug.assert(result.active_count == 0);
-        std.debug.assert(result.flags[0] == 0);
-        std.debug.assert(result.flags[1] == 0);
+        assert(result.active_count == 0);
+        assert(result.flags[0] == 0);
+        assert(result.flags[1] == 0);
 
         return result;
     }
 
-    pub fn is_valid(self: *const Keyboard) bool {
-        return self.active_count <= active_count_max;
+    pub fn is_valid(keyboard: *const Keyboard) bool {
+        return keyboard.active_count <= active_count_max;
     }
 
-    pub fn clear(self: *Keyboard) void {
-        std.debug.assert(self.is_valid());
+    pub fn clear(keyboard: *Keyboard) void {
+        assert(keyboard.is_valid());
 
-        self.flags = .{ 0, 0 };
-        self.active_count = 0;
+        keyboard.flags = .{ 0, 0 };
+        keyboard.active_count = 0;
 
-        std.debug.assert(self.active_count == 0);
-        std.debug.assert(self.flags[0] == 0);
-        std.debug.assert(self.flags[1] == 0);
+        assert(keyboard.active_count == 0);
+        assert(keyboard.flags[0] == 0);
+        assert(keyboard.flags[1] == 0);
     }
 
-    pub fn count(self: *const Keyboard) u32 {
-        std.debug.assert(self.is_valid());
-        std.debug.assert(self.active_count <= active_count_max);
+    pub fn count(keyboard: *const Keyboard) u32 {
+        assert(keyboard.is_valid());
+        assert(keyboard.active_count <= active_count_max);
 
-        return self.active_count;
+        return keyboard.active_count;
     }
 
-    pub fn get_modifiers(self: *const Keyboard) modifier.Set {
-        std.debug.assert(self.is_valid());
+    pub fn get_modifiers(keyboard: *const Keyboard) modifier.Set {
+        assert(keyboard.is_valid());
 
         const result = modifier.Set.from(.{
-            .ctrl = self.is_ctrl_down(),
-            .alt = self.is_alt_down(),
-            .shift = self.is_shift_down(),
-            .win = self.is_win_down(),
+            .ctrl = keyboard.is_ctrl_down(),
+            .alt = keyboard.is_alt_down(),
+            .shift = keyboard.is_shift_down(),
+            .win = keyboard.is_win_down(),
         });
 
-        std.debug.assert(result.flags <= modifier.flag_all);
+        assert(result.flags <= modifier.flag_all);
 
         return result;
     }
 
-    pub fn is_alt_down(self: *const Keyboard) bool {
-        std.debug.assert(self.is_valid());
+    pub fn is_alt_down(keyboard: *const Keyboard) bool {
+        assert(keyboard.is_valid());
 
-        return self.is_down(keycode.menu);
+        return keyboard.is_down(Keycode.alt);
     }
 
-    pub fn is_ctrl_down(self: *const Keyboard) bool {
-        std.debug.assert(self.is_valid());
+    pub fn is_ctrl_down(keyboard: *const Keyboard) bool {
+        assert(keyboard.is_valid());
 
-        return self.is_down(keycode.control);
+        return keyboard.is_down(Keycode.control);
     }
 
-    pub fn is_down(self: *const Keyboard, value: u8) bool {
-        std.debug.assert(self.is_valid());
-        std.debug.assert(value >= keycode.value_min);
-        std.debug.assert(value <= keycode.value_max);
+    pub fn is_down(keyboard: *const Keyboard, value: Keycode) bool {
+        assert(keyboard.is_valid());
 
-        const index: u32 = value / bits_per_flag;
-        const position: u7 = @truncate(value % bits_per_flag);
+        const index: u32 = @intFromEnum(value) / bits_per_flag;
+        const position: u7 = @truncate(@intFromEnum(value) % bits_per_flag);
 
-        std.debug.assert(index < flag_count);
+        assert(index < flag_count);
 
-        return (self.flags[index] & (@as(u128, 1) << position)) != 0;
+        return (keyboard.flags[index] & (@as(u128, 1) << position)) != 0;
     }
 
-    pub fn is_shift_down(self: *const Keyboard) bool {
-        std.debug.assert(self.is_valid());
+    pub fn is_shift_down(keyboard: *const Keyboard) bool {
+        assert(keyboard.is_valid());
 
-        return self.is_down(keycode.shift);
+        return keyboard.is_down(Keycode.shift);
     }
 
-    pub fn is_win_down(self: *const Keyboard) bool {
-        std.debug.assert(self.is_valid());
+    pub fn is_win_down(keyboard: *const Keyboard) bool {
+        assert(keyboard.is_valid());
 
-        const left = self.is_down(keycode.lwin);
-        const right = self.is_down(keycode.rwin);
-
-        return left or right;
+        return keyboard.is_down(Keycode.super);
     }
 
-    pub fn keydown(self: *Keyboard, value: u8) void {
-        std.debug.assert(self.is_valid());
-        std.debug.assert(value >= keycode.value_min);
-        std.debug.assert(value <= keycode.value_max);
+    pub fn keydown(keyboard: *Keyboard, value: Keycode) void {
+        assert(keyboard.is_valid());
 
-        if (!self.is_down(value)) {
-            const tracked = self.add_active_key(value);
+        if (!keyboard.is_down(value)) {
+            const tracked = keyboard.add_active_key(value);
 
             if (!tracked) {
-                std.debug.assert(self.active_count == active_count_max);
-                std.debug.assert(!self.is_down(value));
+                assert(keyboard.active_count == active_count_max);
+                assert(!keyboard.is_down(value));
 
                 return;
             }
         }
 
-        self.set_bit(value);
-        self.update_generic_modifier_down(value);
+        keyboard.set_bit(value);
+        keyboard.update_generic_modifier_down(value);
 
-        std.debug.assert(self.is_down(value));
-        std.debug.assert(self.is_valid());
+        assert(keyboard.is_down(value));
+        assert(keyboard.is_valid());
     }
 
-    pub fn keyup(self: *Keyboard, value: u8) void {
-        std.debug.assert(self.is_valid());
-        std.debug.assert(value >= keycode.value_min);
-        std.debug.assert(value <= keycode.value_max);
+    pub fn keyup(keyboard: *Keyboard, value: Keycode) void {
+        assert(keyboard.is_valid());
 
-        self.clear_bit(value);
-        self.remove_active_key(value);
-        self.update_generic_modifier_up(value);
+        keyboard.clear_bit(value);
+        keyboard.remove_active_key(value);
+        keyboard.update_generic_modifier_up(value);
 
-        std.debug.assert(!self.is_down(value));
-        std.debug.assert(self.is_valid());
+        assert(!keyboard.is_down(value));
+        assert(keyboard.is_valid());
     }
 
-    pub fn sync(self: *Keyboard) void {
-        std.debug.assert(self.is_valid());
+    pub fn sync(keyboard: *Keyboard) void {
+        assert(keyboard.is_valid());
+
+        if (keyboard.active_count == 0) {
+            return;
+        }
+
+        const snapshot = platform.backend.state.capture();
 
         var index: u8 = 0;
         var iteration: u8 = 0;
 
         while (iteration < active_count_max) : (iteration += 1) {
-            if (index >= self.active_count) {
+            if (index >= keyboard.active_count) {
                 break;
             }
 
-            std.debug.assert(index < active_count_max);
+            assert(index < active_count_max);
 
-            const key = self.keys_active[index];
+            const key = keyboard.keys_active[index];
 
-            std.debug.assert(key >= keycode.value_min);
-            std.debug.assert(key <= keycode.value_max);
-
-            const state = win32.GetAsyncKeyState(@intCast(key));
-            const down = state < 0;
+            const down = platform.backend.state.is_key_down_at(&snapshot, key);
 
             if (!down) {
-                self.keyup(key);
+                keyboard.keyup(key);
             } else {
                 index += 1;
             }
         }
 
-        std.debug.assert(self.is_valid());
+        assert(keyboard.is_valid());
     }
 
-    fn add_active_key(self: *Keyboard, value: u8) bool {
-        std.debug.assert(self.is_valid());
-        std.debug.assert(value >= keycode.value_min);
-        std.debug.assert(value <= keycode.value_max);
+    fn add_active_key(keyboard: *Keyboard, value: Keycode) bool {
+        assert(keyboard.is_valid());
 
-        if (self.active_count >= active_count_max) {
+        if (keyboard.active_count >= active_count_max) {
             return false;
         }
 
-        std.debug.assert(self.active_count < active_count_max);
+        assert(keyboard.active_count < active_count_max);
 
-        self.keys_active[self.active_count] = value;
-        self.active_count += 1;
+        keyboard.keys_active[keyboard.active_count] = value;
+        keyboard.active_count += 1;
 
-        std.debug.assert(self.active_count <= active_count_max);
-        std.debug.assert(self.keys_active[self.active_count - 1] == value);
+        assert(keyboard.active_count <= active_count_max);
+        assert(keyboard.keys_active[keyboard.active_count - 1] == value);
 
         return true;
     }
 
-    fn clear_bit(self: *Keyboard, value: u8) void {
-        std.debug.assert(self.is_valid());
-        std.debug.assert(value >= keycode.value_min);
-        std.debug.assert(value <= keycode.value_max);
+    fn clear_bit(keyboard: *Keyboard, value: Keycode) void {
+        assert(keyboard.is_valid());
 
-        const index: u32 = value / bits_per_flag;
-        const position: u7 = @truncate(value % bits_per_flag);
+        const index: u32 = @intFromEnum(value) / bits_per_flag;
+        const position: u7 = @truncate(@intFromEnum(value) % bits_per_flag);
 
-        std.debug.assert(index < flag_count);
+        assert(index < flag_count);
 
-        self.flags[index] &= ~(@as(u128, 1) << position);
+        keyboard.flags[index] &= ~(@as(u128, 1) << position);
     }
 
-    fn remove_active_key(self: *Keyboard, value: u8) void {
-        std.debug.assert(self.is_valid());
-        std.debug.assert(value >= keycode.value_min);
-        std.debug.assert(value <= keycode.value_max);
+    fn remove_active_key(keyboard: *Keyboard, value: Keycode) void {
+        assert(keyboard.is_valid());
 
-        const found_index = self.find_active_key_index(value);
+        const found_index = keyboard.find_active_key_index(value);
 
         if (found_index == null) {
             return;
@@ -215,25 +204,25 @@ pub const Keyboard = struct {
 
         const index = found_index.?;
 
-        std.debug.assert(index < self.active_count);
-        std.debug.assert(self.active_count >= 1);
+        assert(index < keyboard.active_count);
+        assert(keyboard.active_count >= 1);
 
-        self.active_count -= 1;
+        keyboard.active_count -= 1;
 
-        if (index < self.active_count) {
-            self.keys_active[index] = self.keys_active[self.active_count];
+        if (index < keyboard.active_count) {
+            keyboard.keys_active[index] = keyboard.keys_active[keyboard.active_count];
         }
 
-        std.debug.assert(self.active_count <= active_count_max);
+        assert(keyboard.active_count <= active_count_max);
     }
 
-    fn find_active_key_index(self: *const Keyboard, value: u8) ?u8 {
+    fn find_active_key_index(keyboard: *const Keyboard, value: Keycode) ?u8 {
         var i: u8 = 0;
 
-        while (i < self.active_count) : (i += 1) {
-            std.debug.assert(i < active_count_max);
+        while (i < keyboard.active_count) : (i += 1) {
+            assert(i < active_count_max);
 
-            if (self.keys_active[i] == value) {
+            if (keyboard.keys_active[i] == value) {
                 return i;
             }
         }
@@ -241,69 +230,353 @@ pub const Keyboard = struct {
         return null;
     }
 
-    fn set_bit(self: *Keyboard, value: u8) void {
-        std.debug.assert(self.is_valid());
-        std.debug.assert(value >= keycode.value_min);
-        std.debug.assert(value <= keycode.value_max);
+    fn set_bit(keyboard: *Keyboard, value: Keycode) void {
+        assert(keyboard.is_valid());
 
-        const index: u32 = value / bits_per_flag;
-        const position: u7 = @truncate(value % bits_per_flag);
+        const index: u32 = @intFromEnum(value) / bits_per_flag;
+        const position: u7 = @truncate(@intFromEnum(value) % bits_per_flag);
 
-        std.debug.assert(index < flag_count);
+        assert(index < flag_count);
 
-        self.flags[index] |= @as(u128, 1) << position;
+        keyboard.flags[index] |= @as(u128, 1) << position;
     }
 
-    fn update_generic_modifier_down(self: *Keyboard, value: u8) void {
-        std.debug.assert(self.is_valid());
-        std.debug.assert(value >= keycode.value_min);
-        std.debug.assert(value <= keycode.value_max);
+    fn update_generic_modifier_down(keyboard: *Keyboard, value: Keycode) void {
+        assert(keyboard.is_valid());
 
         switch (value) {
-            keycode.lshift, keycode.rshift => self.set_bit(keycode.shift),
-            keycode.lctrl, keycode.rctrl => self.set_bit(keycode.control),
-            keycode.lmenu, keycode.rmenu => self.set_bit(keycode.menu),
+            .shift_left, .shift_right => keyboard.set_bit(Keycode.shift),
+            .control_left, .control_right => keyboard.set_bit(.control),
+            .alt_left, .alt_right => keyboard.set_bit(.alt),
+            .super_left, .super_right => keyboard.set_bit(.super),
             else => {},
         }
     }
 
-    fn update_generic_modifier_up(self: *Keyboard, value: u8) void {
-        std.debug.assert(self.is_valid());
-        std.debug.assert(value >= keycode.value_min);
-        std.debug.assert(value <= keycode.value_max);
+    fn update_generic_modifier_up(keyboard: *Keyboard, value: Keycode) void {
+        assert(keyboard.is_valid());
 
         switch (value) {
-            keycode.lshift, keycode.rshift => self.clear_shift_if_both_up(),
-            keycode.lctrl, keycode.rctrl => self.clear_ctrl_if_both_up(),
-            keycode.lmenu, keycode.rmenu => self.clear_alt_if_both_up(),
+            .shift_left, .shift_right => keyboard.clear_shift_if_both_up(),
+            .control_left, .control_right => keyboard.clear_ctrl_if_both_up(),
+            .alt_left, .alt_right => keyboard.clear_alt_if_both_up(),
+            .super_left, .super_right => keyboard.clear_super_if_both_up(),
             else => {},
         }
     }
 
-    fn clear_shift_if_both_up(self: *Keyboard) void {
-        const left_down = self.is_down(keycode.lshift);
-        const right_down = self.is_down(keycode.rshift);
+    fn clear_shift_if_both_up(keyboard: *Keyboard) void {
+        const left_down = keyboard.is_down(Keycode.shift_left);
+        const right_down = keyboard.is_down(Keycode.shift_right);
 
         if (!left_down and !right_down) {
-            self.clear_bit(keycode.shift);
+            keyboard.clear_bit(Keycode.shift);
         }
     }
 
-    fn clear_ctrl_if_both_up(self: *Keyboard) void {
-        const left_down = self.is_down(keycode.lctrl);
-        const right_down = self.is_down(keycode.rctrl);
+    fn clear_ctrl_if_both_up(keyboard: *Keyboard) void {
+        const left_down = keyboard.is_down(Keycode.control_left);
+        const right_down = keyboard.is_down(Keycode.control_right);
 
         if (!left_down and !right_down) {
-            self.clear_bit(keycode.control);
+            keyboard.clear_bit(Keycode.control);
         }
     }
 
-    fn clear_alt_if_both_up(self: *Keyboard) void {
-        const left_down = self.is_down(keycode.lmenu);
-        const right_down = self.is_down(keycode.rmenu);
+    fn clear_alt_if_both_up(keyboard: *Keyboard) void {
+        const left_down = keyboard.is_down(Keycode.alt_left);
+        const right_down = keyboard.is_down(Keycode.alt_right);
 
         if (!left_down and !right_down) {
-            self.clear_bit(keycode.menu);
+            keyboard.clear_bit(Keycode.alt);
+        }
+    }
+
+    fn clear_super_if_both_up(keyboard: *Keyboard) void {
+        const left_down = keyboard.is_down(Keycode.super_left);
+        const right_down = keyboard.is_down(Keycode.super_right);
+
+        if (!left_down and !right_down) {
+            keyboard.clear_bit(Keycode.super);
         }
     }
 };
+
+const testing = std.testing;
+
+test "a fresh keyboard state holds no keys" {
+    const keyboard = Keyboard.init();
+
+    try testing.expect(keyboard.is_valid());
+    try testing.expectEqual(@as(u32, 0), keyboard.count());
+}
+
+test "a pressed key is held until it is released" {
+    var keyboard = Keyboard.init();
+
+    keyboard.keydown(.a);
+    try testing.expect(keyboard.is_down(.a));
+    try testing.expectEqual(@as(u32, 1), keyboard.count());
+
+    keyboard.keyup(.a);
+    try testing.expect(!keyboard.is_down(.a));
+    try testing.expectEqual(@as(u32, 0), keyboard.count());
+}
+
+test "a keyboard state tracks the modifiers held" {
+    var keyboard = Keyboard.init();
+
+    keyboard.keydown(Keycode.control_left);
+    try testing.expect(keyboard.is_ctrl_down());
+    try testing.expect(keyboard.is_down(Keycode.control));
+
+    keyboard.keydown(Keycode.shift_left);
+    try testing.expect(keyboard.is_shift_down());
+
+    keyboard.keyup(Keycode.control_left);
+    try testing.expect(!keyboard.is_ctrl_down());
+    try testing.expect(!keyboard.is_down(Keycode.control));
+}
+
+test "a keyboard state tracks left and right modifiers apart" {
+    var keyboard = Keyboard.init();
+
+    keyboard.keydown(Keycode.control_left);
+    keyboard.keydown(Keycode.control_right);
+    try testing.expect(keyboard.is_ctrl_down());
+
+    keyboard.keyup(Keycode.control_left);
+    try testing.expect(keyboard.is_ctrl_down());
+
+    keyboard.keyup(Keycode.control_right);
+    try testing.expect(!keyboard.is_ctrl_down());
+}
+
+test "clearing a keyboard state releases every key" {
+    var keyboard = Keyboard.init();
+
+    keyboard.keydown(.a);
+    keyboard.keydown(.b);
+    keyboard.keydown(Keycode.control_left);
+
+    keyboard.clear();
+
+    try testing.expect(keyboard.is_valid());
+    try testing.expectEqual(@as(u32, 0), keyboard.count());
+    try testing.expect(!keyboard.is_down(.a));
+    try testing.expect(!keyboard.is_ctrl_down());
+}
+
+test "a keyboard state reports the modifiers held" {
+    var keyboard = Keyboard.init();
+
+    keyboard.keydown(Keycode.control_left);
+    keyboard.keydown(Keycode.alt_left);
+
+    const modifiers = keyboard.get_modifiers();
+
+    try testing.expect(modifiers.ctrl());
+    try testing.expect(modifiers.alt());
+    try testing.expect(!modifiers.shift());
+    try testing.expect(!modifiers.win());
+}
+
+test "a keyboard state reports the left win key" {
+    var keyboard = Keyboard.init();
+
+    try testing.expect(!keyboard.is_win_down());
+
+    keyboard.keydown(Keycode.super_left);
+    try testing.expect(keyboard.is_win_down());
+
+    keyboard.keyup(Keycode.super_left);
+    try testing.expect(!keyboard.is_win_down());
+}
+
+test "a keyboard state reports the right win key" {
+    var keyboard = Keyboard.init();
+
+    keyboard.keydown(Keycode.super_right);
+    try testing.expect(keyboard.is_win_down());
+
+    keyboard.keyup(Keycode.super_right);
+    try testing.expect(!keyboard.is_win_down());
+}
+
+test "a keyboard state reports both win keys at once" {
+    var keyboard = Keyboard.init();
+
+    keyboard.keydown(Keycode.super_left);
+    keyboard.keydown(Keycode.super_right);
+    try testing.expect(keyboard.is_win_down());
+
+    keyboard.keyup(Keycode.super_left);
+    try testing.expect(keyboard.is_win_down());
+
+    keyboard.keyup(Keycode.super_right);
+    try testing.expect(!keyboard.is_win_down());
+}
+
+test "a keyboard state reports either alt key" {
+    var keyboard = Keyboard.init();
+
+    keyboard.keydown(Keycode.alt_left);
+    try testing.expect(keyboard.is_alt_down());
+    try testing.expect(keyboard.is_down(Keycode.alt));
+
+    keyboard.keyup(Keycode.alt_left);
+    try testing.expect(!keyboard.is_alt_down());
+
+    keyboard.keydown(Keycode.alt_right);
+    try testing.expect(keyboard.is_alt_down());
+}
+
+test "a keyboard state reports either shift key" {
+    var keyboard = Keyboard.init();
+
+    keyboard.keydown(Keycode.shift_left);
+    try testing.expect(keyboard.is_shift_down());
+    try testing.expect(keyboard.is_down(Keycode.shift));
+
+    keyboard.keyup(Keycode.shift_left);
+    try testing.expect(!keyboard.is_shift_down());
+
+    keyboard.keydown(Keycode.shift_right);
+    try testing.expect(keyboard.is_shift_down());
+}
+
+test "a keyboard state holds several keys at once" {
+    var keyboard = Keyboard.init();
+
+    keyboard.keydown(.a);
+    keyboard.keydown(.b);
+    keyboard.keydown(.c);
+
+    try testing.expectEqual(@as(u32, 3), keyboard.count());
+    try testing.expect(keyboard.is_down(.a));
+    try testing.expect(keyboard.is_down(.b));
+    try testing.expect(keyboard.is_down(.c));
+    try testing.expect(!keyboard.is_down(.d));
+
+    keyboard.keyup(.b);
+
+    try testing.expectEqual(@as(u32, 2), keyboard.count());
+    try testing.expect(keyboard.is_down(.a));
+    try testing.expect(!keyboard.is_down(.b));
+    try testing.expect(keyboard.is_down(.c));
+}
+
+test "pressing a held key again leaves the state alone" {
+    var keyboard = Keyboard.init();
+
+    keyboard.keydown(.a);
+    keyboard.keydown(.a);
+
+    try testing.expectEqual(@as(u32, 1), keyboard.count());
+    try testing.expect(keyboard.is_down(.a));
+}
+
+test "releasing a key that is not held leaves the state alone" {
+    var keyboard = Keyboard.init();
+
+    keyboard.keyup(.a);
+
+    try testing.expect(keyboard.is_valid());
+    try testing.expectEqual(@as(u32, 0), keyboard.count());
+}
+
+test "a keyboard state reports every modifier held" {
+    var keyboard = Keyboard.init();
+
+    keyboard.keydown(Keycode.control_left);
+    keyboard.keydown(Keycode.alt_left);
+    keyboard.keydown(Keycode.shift_left);
+    keyboard.keydown(Keycode.super_left);
+
+    const modifiers = keyboard.get_modifiers();
+
+    try testing.expect(modifiers.ctrl());
+    try testing.expect(modifiers.alt());
+    try testing.expect(modifiers.shift());
+    try testing.expect(modifiers.win());
+    try testing.expectEqual(@as(u8, 4), modifiers.count());
+}
+
+test "a keyboard state reports no modifiers when none are held" {
+    var keyboard = Keyboard.init();
+
+    keyboard.keydown(.a);
+
+    const modifiers = keyboard.get_modifiers();
+
+    try testing.expect(!modifiers.ctrl());
+    try testing.expect(!modifiers.alt());
+    try testing.expect(!modifiers.shift());
+    try testing.expect(!modifiers.win());
+    try testing.expect(modifiers.none());
+}
+
+test "a keyboard state holds the function keys" {
+    var keyboard = Keyboard.init();
+
+    keyboard.keydown(Keycode.f1);
+    try testing.expect(keyboard.is_down(Keycode.f1));
+
+    keyboard.keydown(Keycode.f12);
+    try testing.expect(keyboard.is_down(Keycode.f12));
+
+    try testing.expectEqual(@as(u32, 2), keyboard.count());
+}
+
+test "a keyboard state holds the special keys" {
+    var keyboard = Keyboard.init();
+
+    keyboard.keydown(Keycode.escape);
+    try testing.expect(keyboard.is_down(Keycode.escape));
+
+    keyboard.keydown(Keycode.tab);
+    try testing.expect(keyboard.is_down(Keycode.tab));
+
+    keyboard.keydown(Keycode.space);
+    try testing.expect(keyboard.is_down(Keycode.space));
+
+    keyboard.keydown(Keycode.enter);
+    try testing.expect(keyboard.is_down(Keycode.enter));
+}
+
+test "a keyboard state holds the navigation keys" {
+    var keyboard = Keyboard.init();
+
+    keyboard.keydown(Keycode.arrow_left);
+    keyboard.keydown(Keycode.arrow_right);
+    keyboard.keydown(Keycode.arrow_up);
+    keyboard.keydown(Keycode.arrow_down);
+
+    try testing.expect(keyboard.is_down(Keycode.arrow_left));
+    try testing.expect(keyboard.is_down(Keycode.arrow_right));
+    try testing.expect(keyboard.is_down(Keycode.arrow_up));
+    try testing.expect(keyboard.is_down(Keycode.arrow_down));
+    try testing.expectEqual(@as(u32, 4), keyboard.count());
+}
+
+test "clearing a keyboard state releases the modifiers too" {
+    var keyboard = Keyboard.init();
+
+    keyboard.keydown(Keycode.control_left);
+    keyboard.keydown(Keycode.shift_left);
+    keyboard.keydown(Keycode.alt_left);
+    keyboard.keydown(Keycode.super_left);
+
+    try testing.expect(keyboard.is_ctrl_down());
+    try testing.expect(keyboard.is_shift_down());
+    try testing.expect(keyboard.is_alt_down());
+    try testing.expect(keyboard.is_win_down());
+
+    keyboard.clear();
+
+    try testing.expect(!keyboard.is_ctrl_down());
+    try testing.expect(!keyboard.is_shift_down());
+    try testing.expect(!keyboard.is_alt_down());
+    try testing.expect(!keyboard.is_win_down());
+    try testing.expectEqual(@as(u32, 0), keyboard.count());
+}

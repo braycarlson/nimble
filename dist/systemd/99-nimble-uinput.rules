@@ -1,0 +1,5 @@
+# Grant the input group read/write on /dev/uinput so nimbled can create its
+# virtual keyboard and mouse without root. Install to /etc/udev/rules.d/ then
+# reload: sudo cp 99-nimble-uinput.rules /etc/udev/rules.d/ && \
+#   sudo udevadm control --reload-rules && sudo udevadm trigger /dev/uinput
+KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"

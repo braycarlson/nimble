@@ -1,14 +1,11 @@
 const std = @import("std");
 
-const win32 = @import("win32").everything;
+const platform = @import("../platform.zig");
 
-const key_event = @import("../event/key.zig");
-const response = @import("../response.zig");
 const base = @import("../registry/base.zig");
 const entry_mod = @import("../registry/entry.zig");
 
-const Key = key_event.Key;
-const Response = response.Response;
+const assert = std.debug.assert;
 
 pub const capacity_default: u32 = 16;
 pub const capacity_max: u32 = 64;
@@ -26,7 +23,7 @@ pub const Error = base.BaseError || error{
 pub const Callback = *const fn (context: *anyopaque, count: u32) void;
 
 pub const Entry = struct {
-    base: entry_mod.BindingEntry(Callback) = .{},
+    base: entry_mod.BindingEntryType(Callback) = .{},
     initial_delay_ms: u32 = 0,
     interval_ms: u32 = 100,
     running: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
@@ -34,40 +31,40 @@ pub const Entry = struct {
     stop_flag: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
     thread: ?std.Thread = null,
 
-    pub fn get_id(self: *const Entry) u32 {
-        return self.base.get_id();
+    pub fn get_id(entry: *const Entry) u32 {
+        return entry.base.get_id();
     }
 
-    pub fn get_callback(self: *const Entry) ?Callback {
-        return self.base.get_callback();
+    pub fn get_callback(entry: *const Entry) ?Callback {
+        return entry.base.get_callback();
     }
 
-    pub fn get_context(self: *const Entry) ?*anyopaque {
-        return self.base.get_context();
+    pub fn get_context(entry: *const Entry) ?*anyopaque {
+        return entry.base.get_context();
     }
 
-    pub fn get_binding_id(self: *const Entry) u32 {
-        return self.base.get_binding_id();
+    pub fn get_binding_id(entry: *const Entry) u32 {
+        return entry.base.get_binding_id();
     }
 
-    pub fn is_active(self: *const Entry) bool {
-        return self.base.is_active();
+    pub fn is_active(entry: *const Entry) bool {
+        return entry.base.is_active();
     }
 
-    pub fn invoke(self: *Entry, count_value: u32) void {
-        _ = self.base.invoke(.{count_value});
+    pub fn invoke(entry: *Entry, count_value: u32) void {
+        _ = entry.base.invoke(.{count_value});
     }
 
-    pub fn is_valid(self: *const Entry) bool {
-        if (!self.is_active()) {
+    pub fn is_valid(entry: *const Entry) bool {
+        if (!entry.is_active()) {
             return true;
         }
 
-        const valid_base = self.base.is_valid();
-        const valid_interval = self.interval_ms >= interval_min_ms and
-            self.interval_ms <= interval_max_ms;
-        const valid_initial_delay = self.initial_delay_ms <= initial_delay_max_ms;
-        const valid_count = self.count.load(.acquire) <= count_max;
+        const valid_base = entry.base.is_valid();
+        const valid_interval = entry.interval_ms >= interval_min_ms and
+            entry.interval_ms <= interval_max_ms;
+        const valid_initial_delay = entry.initial_delay_ms <= initial_delay_max_ms;
+        const valid_count = entry.count.load(.seq_cst) <= count_max;
 
         return valid_base and valid_interval and valid_initial_delay and valid_count;
     }
@@ -86,40 +83,40 @@ const ThreadContext = struct {
     stop_flag: *std.atomic.Value(bool),
 };
 
-pub fn RepeatRegistry(comptime capacity: u32) type {
+pub fn RepeatRegistryType(comptime capacity: u32) type {
     if (capacity == 0) {
-        @compileError("RepeatRegistry capacity must be at least 1");
+        @compileError("RepeatRegistryType capacity must be at least 1");
     }
 
     if (capacity > capacity_max) {
-        @compileError("RepeatRegistry capacity exceeds maximum");
+        @compileError("RepeatRegistryType capacity exceeds maximum");
     }
 
     return struct {
-        const Self = @This();
+        const Instance = @This();
 
-        const Base = base.BaseRegistry(Entry, capacity, .{
+        const Base = base.BaseRegistryType(Entry, capacity, .{
             .has_mutex = true,
         });
 
         base: Base = Base.init(),
 
-        pub fn init() Self {
-            return Self{};
+        pub fn init() Instance {
+            return Instance{};
         }
 
-        pub fn is_valid(self: *const Self) bool {
-            return self.base.is_valid();
+        pub fn is_valid(instance: *const Instance) bool {
+            return instance.base.is_valid();
         }
 
         pub fn register(
-            self: *Self,
+            instance: *Instance,
             binding_id: u32,
             callback: Callback,
             context: ?*anyopaque,
             options: Options,
         ) Error!u32 {
-            std.debug.assert(binding_id >= 1);
+            assert(binding_id >= 1);
 
             if (options.interval_ms < interval_min_ms or options.interval_ms > interval_max_ms) {
                 return Error.InvalidValue;
@@ -129,17 +126,17 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
                 return Error.InvalidValue;
             }
 
-            self.base.lock();
-            defer self.base.unlock();
+            instance.base.lock();
+            defer instance.base.unlock();
 
-            std.debug.assert(self.is_valid());
+            assert(instance.is_valid());
 
-            const allocation = self.base.allocate_locked() catch return error.RegistryFull;
+            const allocation = instance.base.allocate_locked() catch return error.RegistryFull;
 
-            std.debug.assert(allocation.slot < capacity);
-            std.debug.assert(allocation.id >= 1);
+            assert(allocation.slot < capacity);
+            assert(allocation.id >= 1);
 
-            self.base.slot.entries[allocation.slot] = Entry{
+            instance.base.slot.entries[allocation.slot] = Entry{
                 .base = .{
                     .base = .{
                         .id = allocation.id,
@@ -158,50 +155,50 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
                 .thread = null,
             };
 
-            std.debug.assert(self.base.slot.entries[allocation.slot].is_valid());
+            assert(instance.base.slot.entries[allocation.slot].is_valid());
 
             return allocation.id;
         }
 
-        pub fn unregister(self: *Self, id: u32) Error!void {
-            std.debug.assert(id >= 1);
+        pub fn unregister(instance: *Instance, id: u32) Error!void {
+            assert(id >= 1);
 
             var thread_to_join: ?std.Thread = null;
 
             {
-                self.base.lock();
-                defer self.base.unlock();
+                instance.base.lock();
+                defer instance.base.unlock();
 
-                std.debug.assert(self.is_valid());
+                assert(instance.is_valid());
 
-                const entry = self.base.get_by_id(id) orelse return error.NotFound;
+                const entry = instance.base.get_by_id(id) orelse return error.NotFound;
 
-                thread_to_join = self.stop_entry(entry);
+                thread_to_join = instance.stop_entry(entry);
             }
 
             if (thread_to_join) |t| {
                 t.join();
             }
 
-            self.base.lock();
-            defer self.base.unlock();
+            instance.base.lock();
+            defer instance.base.unlock();
 
-            _ = self.base.free_by_id_locked(id) catch return error.NotFound;
+            _ = instance.base.free_by_id_locked(id) catch return error.NotFound;
         }
 
-        pub fn process(self: *Self, binding_id: u32, down: bool) void {
-            std.debug.assert(binding_id >= 1);
+        pub fn process(instance: *Instance, binding_id: u32, down: bool) void {
+            assert(binding_id >= 1);
 
             var threads_to_join: [capacity]?std.Thread = [_]?std.Thread{null} ** capacity;
             var thread_count: u32 = 0;
 
             {
-                self.base.lock();
-                defer self.base.unlock();
+                instance.base.lock();
+                defer instance.base.unlock();
 
-                std.debug.assert(self.is_valid());
+                assert(instance.is_valid());
 
-                const entries = self.base.entries();
+                const entries = instance.base.entries();
 
                 for (entries) |*e| {
                     if (!e.is_active()) {
@@ -213,10 +210,10 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
                     }
 
                     if (down) {
-                        self.start_entry(e);
+                        instance.start_entry(e);
                     } else {
-                        if (self.stop_entry(e)) |t| {
-                            std.debug.assert(thread_count < capacity);
+                        if (instance.stop_entry(e)) |t| {
+                            assert(thread_count < capacity);
 
                             threads_to_join[thread_count] = t;
                             thread_count += 1;
@@ -225,7 +222,7 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
                 }
             }
 
-            std.debug.assert(thread_count <= capacity);
+            assert(thread_count <= capacity);
 
             for (threads_to_join[0..thread_count]) |maybe_thread| {
                 if (maybe_thread) |t| {
@@ -234,25 +231,25 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
             }
         }
 
-        pub fn stop_all(self: *Self) void {
+        pub fn stop_all(instance: *Instance) void {
             var threads_to_join: [capacity]?std.Thread = [_]?std.Thread{null} ** capacity;
             var thread_count: u32 = 0;
 
             {
-                self.base.lock();
-                defer self.base.unlock();
+                instance.base.lock();
+                defer instance.base.unlock();
 
-                std.debug.assert(self.is_valid());
+                assert(instance.is_valid());
 
-                const entries = self.base.entries();
+                const entries = instance.base.entries();
 
                 for (entries) |*e| {
                     if (!e.is_active()) {
                         continue;
                     }
 
-                    if (self.stop_entry(e)) |t| {
-                        std.debug.assert(thread_count < capacity);
+                    if (instance.stop_entry(e)) |t| {
+                        assert(thread_count < capacity);
 
                         threads_to_join[thread_count] = t;
                         thread_count += 1;
@@ -267,19 +264,19 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
             }
         }
 
-        fn start_entry(self: *Self, entry: *Entry) void {
-            _ = self;
+        fn start_entry(instance: *Instance, entry: *Entry) void {
+            _ = instance;
 
-            std.debug.assert(entry.is_active());
-            std.debug.assert(entry.interval_ms >= interval_min_ms);
+            assert(entry.is_active());
+            assert(entry.interval_ms >= interval_min_ms);
 
-            if (entry.running.load(.acquire)) {
+            if (entry.running.load(.seq_cst)) {
                 return;
             }
 
-            entry.running.store(true, .release);
-            entry.count.store(0, .release);
-            entry.stop_flag.store(false, .release);
+            entry.running.store(true, .seq_cst);
+            entry.count.store(0, .seq_cst);
+            entry.stop_flag.store(false, .seq_cst);
 
             const thread_context = ThreadContext{
                 .callback = entry.get_callback(),
@@ -290,43 +287,43 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
             };
 
             entry.thread = std.Thread.spawn(.{}, repeat_thread, .{thread_context}) catch {
-                entry.running.store(false, .release);
+                entry.running.store(false, .seq_cst);
                 entry.thread = null;
 
                 return;
             };
         }
 
-        fn stop_entry(self: *Self, entry: *Entry) ?std.Thread {
-            _ = self;
+        fn stop_entry(instance: *Instance, entry: *Entry) ?std.Thread {
+            _ = instance;
 
-            std.debug.assert(entry.is_active());
+            assert(entry.is_active());
 
-            if (!entry.running.load(.acquire)) {
+            if (!entry.running.load(.seq_cst)) {
                 return null;
             }
 
-            entry.stop_flag.store(true, .release);
+            entry.stop_flag.store(true, .seq_cst);
 
             const thread = entry.thread;
             entry.thread = null;
-            entry.running.store(false, .release);
+            entry.running.store(false, .seq_cst);
 
             return thread;
         }
 
         fn repeat_thread(thread_context: ThreadContext) void {
-            std.debug.assert(thread_context.interval_ms >= interval_min_ms);
-            std.debug.assert(thread_context.interval_ms <= interval_max_ms);
+            assert(thread_context.interval_ms >= interval_min_ms);
+            assert(thread_context.interval_ms <= interval_max_ms);
 
             if (thread_context.initial_delay_ms > 0) {
-                win32.Sleep(thread_context.initial_delay_ms);
+                platform.backend.time.sleep_ms(thread_context.initial_delay_ms);
             }
 
             var count_current: u32 = 0;
 
-            while (!thread_context.stop_flag.load(.acquire)) {
-                std.debug.assert(count_current < count_max);
+            while (!thread_context.stop_flag.load(.seq_cst)) {
+                assert(count_current < count_max);
 
                 if (thread_context.callback) |callback| {
                     if (thread_context.context) |context| {
@@ -336,7 +333,7 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
 
                 count_current += 1;
 
-                if (thread_context.stop_flag.load(.acquire)) {
+                if (thread_context.stop_flag.load(.seq_cst)) {
                     break;
                 }
 
@@ -344,26 +341,26 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
                     break;
                 }
 
-                win32.Sleep(thread_context.interval_ms);
+                platform.backend.time.sleep_ms(thread_context.interval_ms);
             }
         }
 
-        pub fn clear(self: *Self) void {
+        pub fn clear(instance: *Instance) void {
             var threads_to_join: [capacity]?std.Thread = [_]?std.Thread{null} ** capacity;
             var thread_count: u32 = 0;
 
             {
-                self.base.lock();
-                defer self.base.unlock();
+                instance.base.lock();
+                defer instance.base.unlock();
 
-                std.debug.assert(self.is_valid());
+                assert(instance.is_valid());
 
-                const entries = self.base.entries();
+                const entries = instance.base.entries();
 
                 for (entries) |*e| {
                     if (e.is_active()) {
-                        if (self.stop_entry(e)) |t| {
-                            std.debug.assert(thread_count < capacity);
+                        if (instance.stop_entry(e)) |t| {
+                            assert(thread_count < capacity);
 
                             threads_to_join[thread_count] = t;
                             thread_count += 1;
@@ -372,7 +369,7 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
                 }
             }
 
-            std.debug.assert(thread_count <= capacity);
+            assert(thread_count <= capacity);
 
             for (threads_to_join[0..thread_count]) |maybe_thread| {
                 if (maybe_thread) |t| {
@@ -380,10 +377,182 @@ pub fn RepeatRegistry(comptime capacity: u32) type {
                 }
             }
 
-            self.base.lock();
-            defer self.base.unlock();
+            instance.base.lock();
+            defer instance.base.unlock();
 
-            self.base.clear_locked();
+            instance.base.clear_locked();
         }
     };
+}
+
+const TestContext = struct {
+    invoke_count: u32 = 0,
+    last_count: u32 = 0,
+
+    fn callback(ctx: *anyopaque, count: u32) void {
+        const self: *TestContext = @ptrCast(@alignCast(ctx));
+        self.invoke_count += 1;
+        self.last_count = count;
+    }
+};
+
+test "a new repeat registry is valid and empty" {
+    var registry = RepeatRegistryType(8).init();
+
+    try std.testing.expect(registry.is_valid());
+}
+
+test "registering with valid options stores the entry" {
+    var registry = RepeatRegistryType(8).init();
+    var ctx = TestContext{};
+
+    const id = try registry.register(
+        1,
+        TestContext.callback,
+        &ctx,
+        Options{
+            .interval_ms = 100,
+            .initial_delay_ms = 0,
+        },
+    );
+
+    try std.testing.expect(id >= 1);
+    try std.testing.expect(registry.is_valid());
+}
+
+test "several repeats register side by side" {
+    var registry = RepeatRegistryType(8).init();
+    var ctx1 = TestContext{};
+    var ctx2 = TestContext{};
+
+    const id1 = try registry.register(1, TestContext.callback, &ctx1, Options{});
+    const id2 = try registry.register(2, TestContext.callback, &ctx2, Options{});
+
+    try std.testing.expect(id1 != id2);
+    try std.testing.expect(registry.is_valid());
+}
+
+test "registering past capacity is an error" {
+    var registry = RepeatRegistryType(2).init();
+    var ctx = TestContext{};
+
+    _ = try registry.register(1, TestContext.callback, &ctx, Options{});
+    _ = try registry.register(2, TestContext.callback, &ctx, Options{});
+
+    const result = registry.register(3, TestContext.callback, &ctx, Options{});
+
+    try std.testing.expectError(error.RegistryFull, result);
+}
+
+test "unregistering a repeat drops it" {
+    var registry = RepeatRegistryType(8).init();
+    var ctx = TestContext{};
+
+    const id = try registry.register(1, TestContext.callback, &ctx, Options{});
+
+    try registry.unregister(id);
+
+    try std.testing.expect(registry.is_valid());
+}
+
+test "unregistering an unknown repeat is an error" {
+    var registry = RepeatRegistryType(8).init();
+
+    const result = registry.unregister(999);
+
+    try std.testing.expectError(error.NotFound, result);
+}
+
+test "an interval below the minimum is an error" {
+    var registry = RepeatRegistryType(8).init();
+    var ctx = TestContext{};
+
+    const result = registry.register(1, TestContext.callback, &ctx, Options{
+        .interval_ms = 1,
+    });
+
+    try std.testing.expectError(error.InvalidValue, result);
+}
+
+test "an interval above the maximum is an error" {
+    var registry = RepeatRegistryType(8).init();
+    var ctx = TestContext{};
+
+    const result = registry.register(1, TestContext.callback, &ctx, Options{
+        .interval_ms = interval_max_ms + 1,
+    });
+
+    try std.testing.expectError(error.InvalidValue, result);
+}
+
+test "an out of range initial delay is an error" {
+    var registry = RepeatRegistryType(8).init();
+    var ctx = TestContext{};
+
+    const result = registry.register(1, TestContext.callback, &ctx, Options{
+        .interval_ms = 100,
+        .initial_delay_ms = initial_delay_max_ms + 1,
+    });
+
+    try std.testing.expectError(error.InvalidValue, result);
+}
+
+test "stopping all removes every repeat" {
+    var registry = RepeatRegistryType(8).init();
+    var ctx = TestContext{};
+
+    _ = try registry.register(1, TestContext.callback, &ctx, Options{});
+    _ = try registry.register(2, TestContext.callback, &ctx, Options{});
+
+    registry.stop_all();
+
+    try std.testing.expect(registry.is_valid());
+}
+
+test "repeat options start at their default values" {
+    const opts = Options{};
+
+    try std.testing.expectEqual(@as(u32, 100), opts.interval_ms);
+    try std.testing.expectEqual(@as(u32, 0), opts.initial_delay_ms);
+}
+
+test "repeat options carry the values they are built with" {
+    const opts = Options{
+        .interval_ms = 250,
+        .initial_delay_ms = 50,
+    };
+
+    try std.testing.expectEqual(@as(u32, 250), opts.interval_ms);
+    try std.testing.expectEqual(@as(u32, 50), opts.initial_delay_ms);
+}
+
+test "a default repeat entry is inactive" {
+    const entry = Entry{};
+
+    try std.testing.expectEqual(@as(u32, 0), entry.get_id());
+    try std.testing.expect(entry.get_callback() == null);
+    try std.testing.expect(entry.get_context() == null);
+    try std.testing.expect(!entry.is_active());
+    try std.testing.expectEqual(@as(u32, 100), entry.interval_ms);
+    try std.testing.expectEqual(@as(u32, 0), entry.initial_delay_ms);
+}
+
+test "a default repeat entry is valid" {
+    const entry = Entry{};
+
+    try std.testing.expect(entry.is_valid());
+}
+
+test "constants: valid ranges" {
+    try std.testing.expect(capacity_default >= 1);
+    try std.testing.expect(capacity_max >= capacity_default);
+    try std.testing.expect(capacity_max <= 64);
+
+    try std.testing.expect(interval_min_ms >= 1);
+    try std.testing.expect(interval_max_ms > interval_min_ms);
+
+    try std.testing.expectEqual(@as(u32, 0), initial_delay_default_ms);
+    try std.testing.expect(initial_delay_max_ms >= initial_delay_default_ms);
+
+    try std.testing.expect(count_max >= 1);
 }

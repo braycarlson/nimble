@@ -4,6 +4,8 @@ const key_event = @import("../event/key.zig");
 const response_mod = @import("../response.zig");
 const base = @import("base.zig");
 
+const assert = std.debug.assert;
+
 const Key = key_event.Key;
 const Response = response_mod.Response;
 const Next = base.Next;
@@ -13,24 +15,24 @@ pub const LoggingMiddleware = struct {
     enabled: bool = true,
 
     pub fn init(prefix: []const u8) LoggingMiddleware {
-        std.debug.assert(prefix.len > 0);
-        std.debug.assert(prefix.len <= 64);
+        assert(prefix.len > 0);
+        assert(prefix.len <= 64);
 
         const result = LoggingMiddleware{ .prefix = prefix };
 
-        std.debug.assert(result.enabled);
-        std.debug.assert(result.prefix.len > 0);
+        assert(result.enabled);
+        assert(result.prefix.len > 0);
 
         return result;
     }
 
-    pub fn process(self: *LoggingMiddleware, key: *const Key, next: *const Next) Response {
-        std.debug.assert(self.prefix.len > 0);
-        std.debug.assert(key.is_valid());
+    pub fn process(middleware: *LoggingMiddleware, key: *const Key, next: *const Next) Response {
+        assert(middleware.prefix.len > 0);
+        assert(key.is_valid());
 
-        if (self.enabled) {
+        if (middleware.enabled) {
             std.debug.print("{s}: key=0x{X:0>2} down={}\n", .{
-                self.prefix,
+                middleware.prefix,
                 key.value,
                 key.down,
             });
@@ -38,11 +40,11 @@ pub const LoggingMiddleware = struct {
 
         const response = next.invoke(key);
 
-        std.debug.assert(response.is_valid());
+        assert(response.is_valid());
 
-        if (self.enabled) {
+        if (middleware.enabled) {
             std.debug.print("{s}: response={s}\n", .{
-                self.prefix,
+                middleware.prefix,
                 @tagName(response),
             });
         }
@@ -50,15 +52,15 @@ pub const LoggingMiddleware = struct {
         return response;
     }
 
-    pub fn set_enabled(self: *LoggingMiddleware, value: bool) void {
-        std.debug.assert(self.prefix.len > 0);
+    pub fn set_enabled(middleware: *LoggingMiddleware, value: bool) void {
+        assert(middleware.prefix.len > 0);
 
-        self.enabled = value;
+        middleware.enabled = value;
     }
 
-    pub fn is_enabled(self: *const LoggingMiddleware) bool {
-        std.debug.assert(self.prefix.len > 0);
+    pub fn is_enabled(middleware: *const LoggingMiddleware) bool {
+        assert(middleware.prefix.len > 0);
 
-        return self.enabled;
+        return middleware.enabled;
     }
 };

@@ -1,134 +1,162 @@
 const std = @import("std");
 
-const win32 = @import("win32").everything;
-
 const keycode = @import("../keycode.zig");
 const modifier = @import("../modifier.zig");
 
+const assert = std.debug.assert;
+
+const Keycode = keycode.Keycode;
+
 pub const Key = struct {
-    value: u8,
-    scan: u16,
+    value: Keycode,
     down: bool,
-    injected: bool,
-    extended: bool,
-    extra: u64,
+    injected: bool = false,
+    time_ms: i64 = 0,
     modifiers: modifier.Set = .{},
 
-    pub fn is_valid(self: *const Key) bool {
-        std.debug.assert(self.value <= 0xFF);
-        std.debug.assert(self.modifiers.flags <= modifier.flag_all);
-
-        return keycode.is_valid(self.value);
-    }
-
-    pub fn is_modifier(self: *const Key) bool {
-        std.debug.assert(self.is_valid());
-        std.debug.assert(keycode.is_valid(self.value));
-
-        return keycode.is_modifier(self.value);
-    }
-
-    pub fn is_ctrl_down(self: *const Key) bool {
-        std.debug.assert(self.is_valid());
-        std.debug.assert(self.modifiers.flags <= modifier.flag_all);
-
-        return self.modifiers.ctrl();
-    }
-
-    pub fn is_alt_down(self: *const Key) bool {
-        std.debug.assert(self.is_valid());
-        std.debug.assert(self.modifiers.flags <= modifier.flag_all);
-
-        return self.modifiers.alt();
-    }
-
-    pub fn is_shift_down(self: *const Key) bool {
-        std.debug.assert(self.is_valid());
-        std.debug.assert(self.modifiers.flags <= modifier.flag_all);
-
-        return self.modifiers.shift();
-    }
-
-    pub fn is_win_down(self: *const Key) bool {
-        std.debug.assert(self.is_valid());
-        std.debug.assert(self.modifiers.flags <= modifier.flag_all);
-
-        return self.modifiers.win();
-    }
-
-    pub fn parse(wparam: win32.WPARAM, lparam: win32.LPARAM) ?Key {
-        std.debug.assert(@sizeOf(win32.WPARAM) >= 4);
-        std.debug.assert(@sizeOf(win32.LPARAM) >= 4);
-
-        const data = extract(lparam) orelse return null;
-
-        if (!is_keycode_valid(data)) {
-            return null;
+    pub fn is_valid(key: *const Key) bool {
+        if (key.time_ms < 0) {
+            return false;
         }
 
-        const result = Key{
-            .value = @truncate(data.vkCode),
-            .scan = @truncate(data.scanCode),
-            .down = is_down(wparam),
-            .injected = data.flags.INJECTED == 1,
-            .extended = data.flags.EXTENDED == 1,
-            .extra = @intCast(data.dwExtraInfo),
-            .modifiers = .{},
-        };
-
-        std.debug.assert(keycode.is_valid(result.value));
-        std.debug.assert(result.modifiers.flags == modifier.flag_none);
-
-        return result;
+        return keycode.is_defined(key.value);
     }
 
-    pub fn with_modifiers(self: Key, modifiers: modifier.Set) Key {
-        std.debug.assert(self.is_valid());
-        std.debug.assert(modifiers.flags <= modifier.flag_all);
+    pub fn is_modifier(key: *const Key) bool {
+        assert(key.is_valid());
 
-        var result = self;
+        return key.value.is_modifier();
+    }
+
+    pub fn is_ctrl_down(key: *const Key) bool {
+        assert(key.is_valid());
+
+        return key.modifiers.ctrl();
+    }
+
+    pub fn is_alt_down(key: *const Key) bool {
+        assert(key.is_valid());
+
+        return key.modifiers.alt();
+    }
+
+    pub fn is_shift_down(key: *const Key) bool {
+        assert(key.is_valid());
+
+        return key.modifiers.shift();
+    }
+
+    pub fn is_win_down(key: *const Key) bool {
+        assert(key.is_valid());
+
+        return key.modifiers.win();
+    }
+
+    pub fn with_modifiers(key: Key, modifiers: modifier.Set) Key {
+        assert(key.is_valid());
+        assert(modifiers.flags <= modifier.flag_all);
+
+        var result = key;
         result.modifiers = modifiers;
 
-        std.debug.assert(result.modifiers.eql(&modifiers));
-        std.debug.assert(result.value == self.value);
+        assert(result.modifiers.eql(&modifiers));
+        assert(result.value == key.value);
+        assert(result.is_valid());
 
         return result;
     }
-
-    fn extract(lparam: win32.LPARAM) ?*win32.KBDLLHOOKSTRUCT {
-        std.debug.assert(@sizeOf(win32.LPARAM) == @sizeOf(u64) or @sizeOf(win32.LPARAM) == @sizeOf(u32));
-
-        if (lparam == 0) {
-            return null;
-        }
-
-        const address: u64 = @intCast(lparam);
-
-        std.debug.assert(address != 0);
-
-        return @ptrFromInt(address);
-    }
-
-    pub fn from_lparam(lparam: win32.LPARAM) ?*win32.KBDLLHOOKSTRUCT {
-        return extract(lparam);
-    }
-
-    fn is_keycode_valid(data: *win32.KBDLLHOOKSTRUCT) bool {
-        std.debug.assert(keycode.value_min == 0x01);
-        std.debug.assert(keycode.value_max == 0xFE);
-
-        const above = data.vkCode >= keycode.value_min;
-        const below = data.vkCode <= keycode.value_max;
-
-        return above and below;
-    }
-
-    fn is_down(wparam: win32.WPARAM) bool {
-        std.debug.assert(wparam != 0);
-
-        const is_keydown = wparam == win32.WM_KEYDOWN;
-        const is_syskeydown = wparam == win32.WM_SYSKEYDOWN;
-
-        return is_keydown or is_syskeydown;
-    }
 };
+
+const testing = std.testing;
+
+fn make_key(value: Keycode, mods: modifier.Set) Key {
+    return Key{ .value = value, .down = true, .modifiers = mods };
+}
+
+test "every defined keycode makes a valid key event" {
+    inline for (@typeInfo(Keycode).@"enum".fields) |field| {
+        const key = make_key(@enumFromInt(field.value), .{});
+
+        try testing.expect(key.is_valid());
+    }
+}
+
+test "a negative timestamp is rejected before anything else" {
+    var key = make_key(.a, .{});
+    key.time_ms = -1;
+
+    try testing.expect(!key.is_valid());
+}
+
+test "a stamped key event is valid" {
+    const key = Key{ .value = .a, .down = true, .injected = true, .time_ms = 1234 };
+
+    try testing.expect(key.is_valid());
+    try testing.expect(key.injected);
+    try testing.expectEqual(@as(i64, 1234), key.time_ms);
+}
+
+test "a key event reports sided and generic modifiers alike" {
+    try testing.expect(make_key(Keycode.control_left, .{}).is_modifier());
+    try testing.expect(make_key(Keycode.control_right, .{}).is_modifier());
+    try testing.expect(make_key(Keycode.shift_left, .{}).is_modifier());
+    try testing.expect(make_key(Keycode.alt_left, .{}).is_modifier());
+    try testing.expect(make_key(Keycode.super_left, .{}).is_modifier());
+    try testing.expect(!make_key(.a, .{}).is_modifier());
+    try testing.expect(!make_key(Keycode.space, .{}).is_modifier());
+}
+
+test "a key reads its modifier predicates from the modifier set" {
+    const key = make_key(.a, modifier.Set.from(.{
+        .ctrl = true,
+        .alt = true,
+        .shift = true,
+        .win = true,
+    }));
+
+    try testing.expect(key.is_ctrl_down());
+    try testing.expect(key.is_alt_down());
+    try testing.expect(key.is_shift_down());
+    try testing.expect(key.is_win_down());
+}
+
+test "a bare key reports no modifiers" {
+    const key = make_key(.a, .{});
+
+    try testing.expect(!key.is_ctrl_down());
+    try testing.expect(!key.is_alt_down());
+    try testing.expect(!key.is_shift_down());
+    try testing.expect(!key.is_win_down());
+}
+
+test "replacing the modifiers leaves the rest of the event alone" {
+    const key = Key{ .value = .b, .down = true, .injected = true, .time_ms = 42 };
+    const mods = modifier.Set.from(.{ .ctrl = true, .shift = true });
+
+    const result = key.with_modifiers(mods);
+
+    try testing.expectEqual(Keycode.b, result.value);
+    try testing.expect(result.down);
+    try testing.expect(result.injected);
+    try testing.expectEqual(@as(i64, 42), result.time_ms);
+    try testing.expect(result.is_ctrl_down());
+    try testing.expect(result.is_shift_down());
+    try testing.expect(!result.is_alt_down());
+    try testing.expect(!result.is_win_down());
+}
+
+test "a key down and a key up are distinguishable" {
+    const down = Key{ .value = .d, .down = true };
+    const up = Key{ .value = .d, .down = false };
+
+    try testing.expect(down.down);
+    try testing.expect(!up.down);
+}
+
+test "a key defaults to a local, unstamped event" {
+    const key = Key{ .value = .e, .down = true };
+
+    try testing.expect(!key.injected);
+    try testing.expectEqual(@as(i64, 0), key.time_ms);
+    try testing.expect(key.modifiers.none());
+}
