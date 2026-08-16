@@ -1,7 +1,7 @@
 <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/braycarlson/nimble/main/assets/nimble-lockup-ondark.png">
     <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/braycarlson/nimble/main/assets/nimble-lockup-onlight.png">
-    <img alt="nimble" src="https://raw.githubusercontent.com/braycarlson/nimble/main/assets/nimble-lockup-onlight.png" width="500">
+    <img alt="nimble" src="https://raw.githubusercontent.com/braycarlson/nimble/main/assets/nimble-lockup-onlight.png" width="400">
 </picture>
 
 &nbsp;
