@@ -1,0 +1,13 @@
+.{
+    .name = .nimble,
+    .version = "0.1.0",
+    .minimum_zig_version = "0.17.0",
+    .fingerprint = 0x61915b59d2f0c35a,
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "LICENSE",
+        "src",
+    },
+    .dependencies = .{},
+}
