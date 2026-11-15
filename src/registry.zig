@@ -1,0 +1,13 @@
+pub const base = @import("registry/base.zig");
+pub const chord = @import("registry/chord.zig");
+pub const command = @import("registry/command.zig");
+pub const entry = @import("registry/entry.zig");
+pub const key = @import("registry/key.zig");
+pub const macro = @import("registry/macro.zig");
+pub const mouse = @import("registry/mouse.zig");
+pub const oneshot = @import("registry/oneshot.zig");
+pub const repeat = @import("registry/repeat.zig");
+pub const sequence = @import("registry/sequence.zig");
+pub const slot = @import("registry/slot.zig");
+pub const timer = @import("registry/timer.zig");
+pub const toggle = @import("registry/toggle.zig");

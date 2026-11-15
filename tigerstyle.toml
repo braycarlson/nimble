@@ -1,0 +1,5 @@
+extend_select = ["TS022", "TS026"]
+
+[extend-per-file-ignores]
+"src/platform/linux.zig" = ["TS005"]
+"src/platform/windows.zig" = ["TS005"]
